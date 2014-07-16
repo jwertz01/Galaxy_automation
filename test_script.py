@@ -45,8 +45,6 @@ if type(R2) != dict: # dict would indicte file already there
 #Have files in place need to set up workflow
 # Based on example at http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
 datamap = dict()
-print R1
-print R1['id']
 datamap['14080'] = {'src':'ld', 'id': platform_design}
 datamap['14081'] = {'src':'ld','id': known_variants}
 datamap['14082'] = {'src':'ld','id': R1[0]['id']}
