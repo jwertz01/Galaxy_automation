@@ -15,7 +15,7 @@ api_key = 'c4ec958ebfbb56a2148f264fb89af7d5 ' #neon-galaxy.hpc api key
 #galaxy_host = 'https://galaxy.hpc.uiowa.edu' #real Galaxy
 galaxy_host ='https://neon-galaxy.hpc.uiowa.edu:44300'
 #oto_wf_id = 'c50592c2d5f1990d' #real oto workflow
-oto_wf_id = '2cd2ec6b6f5778cf' #neon oto workflow
+oto_wf_id = 'eeba014900a7fb69' #neon oto workflow
 platform_design = '4297a1e53d8b35a4'
 known_variants = '0f299008fdceea36'
 oto_custom_data = '792cdd29e54db84f'
@@ -23,7 +23,10 @@ report_template = 'f843e8d542196e75'
 custom_quality_metrics = '38b6e00a3fe71a99'
 R1 = sys.argv[1]
 R2 = sys.argv[2]
-sampleName = 'samName'
+try:
+    sampleName = os.path.basename(R1).split('_')[0]
+except:
+    sampleName = 'Unable_to_parse'
 
 galaxyInstance = GalaxyInstance(galaxy_host,key=api_key)
 historyClient = HistoryClient(galaxyInstance)
@@ -40,24 +43,16 @@ R1 = toolClient.upload_file(R1,history['id'],file_type='fastqsanger')
 R2 = toolClient.upload_file(R2,history['id'],file_type='fastqsanger')
 #Have files in place need to set up workflow
 # Based on example at http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
-#datamap = dict()
-#datamap['14080'] = {'src':'ldda', 'id': platform_design}
-#datamap['14081'] = {'src':'ldda','id': known_variants}
-#datamap['14082'] = {'src':'ldda','id': R1['id']}
-#datamap['14083'] = {'src':'ldda','id': oto_custom_data}
-#datamap['14084'] = {'src':'ldda','id': report_template}
-#datamap['14085'] = {'src':'ldda','id': R2['id']}
-#datamap['14086'] = {'src':'ldda','id': custom_quality_metrics
 print workflow['inputs']
 #datamap  = {workflow['inputs'].keys()[0]: {'id': R1['outputs'][0]['id'], 'src': 'hda'}} #simple datamap for testing
-datamap  = {workflow['inputs'].keys()[0]: {'id': platform_design, 'src': 'ld'},
-            workflow['inputs'].keys()[1]: {'id': known_variants, 'src': 'ld'},
+datamap  = {workflow['inputs'].keys()[0]: {'id': platform_design, 'src': 'hda'},
+            workflow['inputs'].keys()[1]: {'id': known_variants, 'src': 'hda'},
             workflow['inputs'].keys()[2]: {'id': R1['outputs'][0]['id'], 'src': 'hda'},
-            workflow['inputs'].keys()[3]: {'id': oto_custom_data, 'src': 'ld'},
+            workflow['inputs'].keys()[3]: {'id': oto_custom_data, 'src': 'hda'},
             workflow['inputs'].keys()[4]: {'id': R2['outputs'][0]['id'], 'src': 'hda'},
-            workflow['inputs'].keys()[5]: {'id': custom_quality_metrics, 'src': 'ld'},
+            workflow['inputs'].keys()[5]: {'id': custom_quality_metrics, 'src': 'hda'},
             }
 params = {}
-rep_params = {}
+rep_params = {'SAMPLE_ID':sampleName}
 rwf = workflowClient.run_workflow(workflow['id'],datamap,params=params,history_id=history['id'],replacement_params=rep_params)
 print rwf
