@@ -10,6 +10,7 @@ import time
 import sys
 import os.path
 
+
 #api_key = '293b01c35e9be1202446de4c0f4193b9' #galaxy.hpc api key
 api_key = 'c4ec958ebfbb56a2148f264fb89af7d5 ' #neon-galaxy.hpc api key
 #galaxy_host = 'https://galaxy.hpc.uiowa.edu' #real Galaxy
