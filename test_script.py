@@ -45,13 +45,15 @@ R2 = toolClient.upload_file(R2,history['id'],file_type='fastqsanger')
 #Have files in place need to set up workflow
 # Based on example at http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
 print workflow['inputs']
+
 #datamap  = {workflow['inputs'].keys()[0]: {'id': R1['outputs'][0]['id'], 'src': 'hda'}} #simple datamap for testing
-datamap  = {workflow['inputs'].keys()[0]: {'id': platform_design, 'src': 'hda'},
-            workflow['inputs'].keys()[1]: {'id': known_variants, 'src': 'hda'},
+datamap  = {workflow['inputs'].keys()[6]: {'id': platform_design, 'src': 'hda'},
+            workflow['inputs'].keys()[5]: {'id': known_variants, 'src': 'hda'},
             workflow['inputs'].keys()[2]: {'id': R1['outputs'][0]['id'], 'src': 'hda'},
-            workflow['inputs'].keys()[3]: {'id': oto_custom_data, 'src': 'hda'},
-            workflow['inputs'].keys()[4]: {'id': R2['outputs'][0]['id'], 'src': 'hda'},
-            workflow['inputs'].keys()[5]: {'id': custom_quality_metrics, 'src': 'hda'},
+            workflow['inputs'].keys()[4]: {'id': oto_custom_data, 'src': 'hda'},
+            workflow['inputs'].keys()[3]: {'id': R2['outputs'][0]['id'], 'src': 'hda'},
+            workflow['inputs'].keys()[1]: {'id': report_template, 'src': 'hda'},
+            workflow['inputs'].keys()[0]: {'id': custom_quality_metrics, 'src': 'hda'},
             }
 params = {}
 rep_params = {'SAMPLE_ID':sampleName}
