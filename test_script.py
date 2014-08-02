@@ -60,7 +60,7 @@ dataSetClient = DatasetClient(galaxyInstance)
 
 generic_data_map = setup_base_datamap()
 
-for R1 in glob.glob(parser.get('Globals','fastq_dir')+"*subsub*"):
+for R1 in glob.glob(parser.get('Globals','fastq_dir')+"*R1*fastq.gz"):
     data_map = generic_data_map
     R2 = R1.replace('R1','R2')
     if not os.path.exists(R1):
@@ -80,12 +80,8 @@ for R1 in glob.glob(parser.get('Globals','fastq_dir')+"*subsub*"):
             elif data_map[d]['id'] == 'read2':
                 data_map[d]['id'] = R2['outputs'][0]['id']
 
-    #workflow['inputs'].keys()[2]: {'id': R1['outputs'][0]['id'], 'src': 'hda'},
-    #workflow['inputs'].keys()[3]: {'id': R2['outputs'][0]['id'], 'src': 'hda'},
-
     # Have files in place need to set up workflow
     # Based on example at http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
-
 
     rep_params = {'SAMPLE_ID': sampleName}
     params = {}
