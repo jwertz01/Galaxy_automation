@@ -10,6 +10,7 @@ import sys
 import os.path
 from ConfigParser import SafeConfigParser
 import re
+import glob
 
 
 def get_api_key(file_name):
@@ -18,51 +19,77 @@ def get_api_key(file_name):
     return api
 
 
+def parse_sample_name(file_path):
+    sampleName = file_name_re.match(os.path.basename(file_path))
+    if sampleName != None:
+        return sampleName.group(1)
+    else:
+        return 'Unable_to_parse'
+
+
+def setup_base_datamap():
+    oto_wf_id = parser.get('Globals','oto_wf_id')
+    dataset_list = parser.get('Globals', 'input_ids').split(',')
+    workflow = workflowClient.show_workflow(oto_wf_id)
+    workflow_input_keys = workflow['inputs'].keys()
+    assert len(workflow_input_keys) == len(dataset_list)
+    dm = {}
+    for d,w in zip(dataset_list,workflow_input_keys):
+        if not d.startswith('read'):
+            data_set = dataSetClient.show_dataset(dataset_id=d)
+        else:
+            data_set = {'id': d, 'name': d, 'hda_ldda': 'hda'}
+        print "Workflow requesting %s assigning %s:%s " % (workflow['inputs'][w]['label'], data_set['name'], data_set['id'])
+        dm[w]={'id':data_set['id'],'src':data_set['hda_ldda']}
+    return dm
+
 parser = SafeConfigParser()
 parser.read('configuration.ini')
 api_key = get_api_key(parser.get('Globals', 'api_file'))
 galaxy_host = parser.get('Globals', 'galaxy_host')
-oto_wf_id = parser.get('Globals', 'oto_wf_id')
-platform_design = parser.get('Globals', 'platform_design')
-known_variants = parser.get('Globals', 'known_variants')
-oto_custom_data = parser.get('Globals', 'oto_custom_data')
-report_template = parser.get('Globals', 'report_template')
-custom_quality_metrics = parser.get('Globals', 'custom_quality_metrics')
-file_name_re = re.compile(parser.get('Globals', 'sample_re'))
-R1 = sys.argv[1]
-R2 = sys.argv[2]
 
-try:
-    sampleName = file_name_re.match(os.path.basename(R1)).group(1)
-except ArithmeticError:
-    sampleName = 'Unable_to_parse'
+file_name_re = re.compile(parser.get('Globals', 'sample_re'))
+
+
 
 galaxyInstance = GalaxyInstance(galaxy_host, key=api_key)
 historyClient = HistoryClient(galaxyInstance)
 toolClient = ToolClient(galaxyInstance)
 workflowClient = WorkflowClient(galaxyInstance)
 dataSetClient = DatasetClient(galaxyInstance)
-workflow = workflowClient.show_workflow(oto_wf_id)
-history = historyClient.create_history(sampleName)
 
-R1 = toolClient.upload_file(R1, history['id'], file_type='fastqsanger')
-R2 = toolClient.upload_file(R2, history['id'], file_type='fastqsanger')
+generic_data_map = setup_base_datamap()
 
-# Have files in place need to set up workflow
-# Based on example at http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
+for R1 in glob.glob(parser.get('Globals','fastq_dir')+"*subsub*"):
+    data_map = generic_data_map
+    R2 = R1.replace('R1','R2')
+    if not os.path.exists(R1):
+        print "%s File Not Found" % (R1, )
+        raise Exception
+    if not os.path.exists(R2):
+        print "%s File Not Found" % (R1, )
+        raise Exception
+    sampleName = parse_sample_name(R1)
+    print "Running %s and %s with name %s" %(R1,R2,sampleName)
+    history = historyClient.create_history(sampleName)
+    R1 = toolClient.upload_file(R1, history['id'], file_type='fastqsanger')
+    R2 = toolClient.upload_file(R2, history['id'], file_type='fastqsanger')
+    for d in data_map.keys():
+            if data_map[d]['id'] == 'read1':
+                data_map[d]['id'] = R1['outputs'][0]['id']
+            elif data_map[d]['id'] == 'read2':
+                data_map[d]['id'] = R2['outputs'][0]['id']
 
-datamap = {
-    workflow['inputs'].keys()[0]: {'id': custom_quality_metrics, 'src': 'hda'},
-    workflow['inputs'].keys()[1]: {'id': report_template, 'src': 'hda'},
-    workflow['inputs'].keys()[2]: {'id': R1['outputs'][0]['id'], 'src': 'hda'},
-    workflow['inputs'].keys()[3]: {'id': R2['outputs'][0]['id'], 'src': 'hda'},
-    workflow['inputs'].keys()[4]: {'id': oto_custom_data, 'src': 'hda'},
-    workflow['inputs'].keys()[5]: {'id': known_variants, 'src': 'hda'},
-    workflow['inputs'].keys()[6]: {'id': platform_design, 'src': 'hda'},
-}
-params = {}
-rep_params = {'SAMPLE_ID': sampleName}
-rwf = workflowClient.run_workflow(workflow['id'],
-                                  datamap, params=params, history_id=history['id'],
-                                  replacement_params=rep_params)
-print rwf
+    #workflow['inputs'].keys()[2]: {'id': R1['outputs'][0]['id'], 'src': 'hda'},
+    #workflow['inputs'].keys()[3]: {'id': R2['outputs'][0]['id'], 'src': 'hda'},
+
+    # Have files in place need to set up workflow
+    # Based on example at http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
+
+
+    rep_params = {'SAMPLE_ID': sampleName}
+    params = {}
+    rwf = workflowClient.run_workflow(parser.get('Globals','oto_wf_id'),
+                                      data_map, params=params, history_id=history['id'],
+                                      replacement_params=rep_params)
+    print rwf
