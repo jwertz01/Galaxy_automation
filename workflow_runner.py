@@ -8,7 +8,7 @@ from bioblend.galaxy.tools import ToolClient
 from bioblend.galaxy.workflows import WorkflowClient
 from bioblend.galaxy.datasets import DatasetClient
 import sys
-import os.walk
+import os
 import fnmatch
 import os.path
 from ConfigParser import SafeConfigParser
@@ -68,32 +68,37 @@ dataSetClient = DatasetClient(galaxyInstance)
 
 generic_data_map = setup_base_datamap()
 files = get_files(parser.get('Globals','fastq_dir'))
-for R1 in files:
-    data_map = generic_data_map
-    R2 = R1.replace('R1','R2')
-    if not os.path.exists(R1):
-        print "%s File Not Found" % (R1, )
-        raise Exception
-    if not os.path.exists(R2):
-        print "%s File Not Found" % (R1, )
-        raise Exception
-    sampleName = parse_sample_name(R1)
-    print "Running %s and %s with name %s" %(R1,R2,sampleName)
-    history = historyClient.create_history(sampleName)
-    R1 = toolClient.upload_file(R1, history['id'], file_type='fastqsanger')
-    R2 = toolClient.upload_file(R2, history['id'], file_type='fastqsanger')
-    for d in data_map.keys():
-            if data_map[d]['id'] == 'read1':
-                data_map[d]['id'] = R1['outputs'][0]['id']
-            elif data_map[d]['id'] == 'read2':
-                data_map[d]['id'] = R2['outputs'][0]['id']
+if len(files) == 0:
+        print "Not able to find any fastq files looked in %s" %(parser.get('Globals', 'fastq_dir'))
+else:
+    print "Found fastq files running workflow for the following files (R2's will be added)"
+    print ",".join(files)
+    for R1 in files:
+        data_map = generic_data_map
+        R2 = R1.replace('R1','R2')
+        if not os.path.exists(R1):
+            print "%s File Not Found" % (R1, )
+            raise Exception
+        if not os.path.exists(R2):
+            print "%s File Not Found" % (R1, )
+            raise Exception
+        sampleName = parse_sample_name(R1)
+        print "Running %s and %s with name %s" %(R1,R2,sampleName)
+        history = historyClient.create_history(sampleName)
+        R1 = toolClient.upload_file(R1, history['id'], file_type='fastqsanger')
+        R2 = toolClient.upload_file(R2, history['id'], file_type='fastqsanger')
+        for d in data_map.keys():
+                if data_map[d]['id'] == 'read1':
+                    data_map[d]['id'] = R1['outputs'][0]['id']
+                elif data_map[d]['id'] == 'read2':
+                    data_map[d]['id'] = R2['outputs'][0]['id']
 
-    # Have files in place need to set up workflow
-    # Based on example at http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
+        # Have files in place need to set up workflow
+        # Based on example at http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
 
-    rep_params = {'SAMPLE_ID': sampleName}
-    params = {}
-    rwf = workflowClient.run_workflow(parser.get('Globals','oto_wf_id'),
-                                      data_map, params=params, history_id=history['id'],
-                                      replacement_params=rep_params)
-    print rwf
+        rep_params = {'SAMPLE_ID': sampleName}
+        params = {}
+        rwf = workflowClient.run_workflow(parser.get('Globals','oto_wf_id'),
+                                          data_map, params=params, history_id=history['id'],
+                                          replacement_params=rep_params)
+        print rwf
