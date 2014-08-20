@@ -51,6 +51,7 @@ def get_files(root_path):
     for root, dirnames, filenames in os.walk(root_path):
       for filename in fnmatch.filter(filenames, '*R1*fastq.gz'):
           matches.append(os.path.join(root, filename))
+    return matches
 parser = SafeConfigParser()
 parser.read('configuration.ini')
 api_key = get_api_key(parser.get('Globals', 'api_file'))
@@ -80,7 +81,7 @@ else:
             print "%s File Not Found" % (R1, )
             raise Exception
         if not os.path.exists(R2):
-            print "%s File Not Found" % (R1, )
+            print "%s R2 file Not Found" % (R1, )
             raise Exception
         sampleName = parse_sample_name(R1)
         print "Running %s and %s with name %s" %(R1,R2,sampleName)
