@@ -13,7 +13,8 @@ import fnmatch
 import os.path
 from ConfigParser import SafeConfigParser
 import re
-import glob
+import time
+import copy
 
 
 def get_api_key(file_name):
@@ -48,7 +49,7 @@ def setup_base_datamap():
             if not list_mapping[workflow_label].startswith('read'):
                 data_set = dataSetClient.show_dataset(dataset_id=list_mapping[workflow_label],)
             else:
-                   data_set = {'id': list_mapping[workflow_label], 'name': list_mapping[workflow_label], 'hda_ldda': 'hda'}
+                data_set = {'id': list_mapping[workflow_label], 'name': list_mapping[workflow_label], 'hda_ldda': 'hda'}
         else:
             print "Workflow requesting '%s' unsure what to assign. Choices I have: %s" % (workflow_label, ",".join(list_mapping.keys()))
             labels = ""
@@ -95,8 +96,10 @@ if len(files) == 0:
 else:
     print "Found fastq files running workflow for the following files (R2's will be added)"
     print ",".join(files)
+    files_to_keep = {}
     for R1 in files:
-        data_map = generic_data_map
+        input_dir_path = os.path.dirname(R1)
+        data_map = copy.deepcopy(generic_data_map)
         R2 = R1.replace('R1','R2')
         if not os.path.exists(R1):
             print "%s File Not Found" % (R1, )
@@ -107,8 +110,10 @@ else:
         sampleName = parse_sample_name(R1)
         print "Running %s and %s with name %s" %(R1,R2,sampleName)
         history = historyClient.create_history(sampleName)
+        print data_map
         R1 = toolClient.upload_file(R1, history['id'], file_type='fastqsanger',dbkey=parser.get('Globals','genome'))
         R2 = toolClient.upload_file(R2, history['id'], file_type='fastqsanger',dbkey=parser.get('Globals','genome'))
+
         for d in data_map.keys():
                 if data_map[d]['id'] == 'read1':
                     data_map[d]['id'] = R1['outputs'][0]['id']
@@ -117,10 +122,31 @@ else:
 
         # Have files in place need to set up workflow
         # Based on example at http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
-
         rep_params = {'SAMPLE_ID': sampleName}
+        print sampleName
         params = {}
         rwf = workflowClient.run_workflow(parser.get('Globals','oto_wf_id'),
                                           data_map, params=params, history_id=history['id'],
                                           replacement_params=rep_params)
-        print rwf
+        for output in rwf['outputs']:
+            data_set = dataSetClient.show_dataset(dataset_id=output,)
+            if sampleName == data_set['name'].split('.')[0]:
+                if not files_to_keep.has_key(input_dir_path):
+                    files_to_keep[input_dir_path]=[]
+                files_to_keep[input_dir_path].append(output)
+timestr = time.strftime("%Y%m%d-%H%M%S")
+fh = open(timestr, 'w')
+for path in files_to_keep:
+    for id in files_to_keep[path]:
+        fh.write("%s:%s\n" % (path,id))
+fh.close()
+for path in files_to_keep:
+    retrieved = []
+    while len(retrieved) != len(files_to_keep[path]):
+        for output in files_to_keep[path]:
+            data_set = dataSetClient.show_dataset(dataset_id=output,)
+            if data_set['state'] == 'ok':
+                #download = dataSetClient.download_dataset(output,file_path=path,use_default_filename=True,wait_for_completion=True,maxwait=600)
+                retrieved.append("test")
+    time.sleep(120)
+os.remove(timestr)
