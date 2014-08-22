@@ -107,8 +107,8 @@ else:
         sampleName = parse_sample_name(R1)
         print "Running %s and %s with name %s" %(R1,R2,sampleName)
         history = historyClient.create_history(sampleName)
-        R1 = toolClient.upload_file(R1, history['id'], file_type='fastqsanger')
-        R2 = toolClient.upload_file(R2, history['id'], file_type='fastqsanger')
+        R1 = toolClient.upload_file(R1, history['id'], file_type='fastqsanger',dbkey=parser.get('Globals','genome'))
+        R2 = toolClient.upload_file(R2, history['id'], file_type='fastqsanger',dbkey=parser.get('Globals','genome'))
         for d in data_map.keys():
                 if data_map[d]['id'] == 'read1':
                     data_map[d]['id'] = R1['outputs'][0]['id']
