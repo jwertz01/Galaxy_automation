@@ -33,16 +33,29 @@ def parse_sample_name(file_path):
 def setup_base_datamap():
     oto_wf_id = parser.get('Globals','oto_wf_id')
     dataset_list = parser.get('Globals', 'input_ids').split(',')
+    list_mapping = {}
+    for data in dataset_list:
+            key,value = data.split(':')
+            list_mapping[key]=value
     workflow = workflowClient.show_workflow(oto_wf_id)
     workflow_input_keys = workflow['inputs'].keys()
     assert len(workflow_input_keys) == len(dataset_list)
     dm = {}
-    for d,w in zip(dataset_list,workflow_input_keys):
-        if not d.startswith('read'):
-            data_set = dataSetClient.show_dataset(dataset_id=d)
+    for w in workflow_input_keys:
+        workflow_label = workflow['inputs'][w]['label']
+        #find mapping if present
+        if list_mapping.has_key(workflow_label):
+            if not list_mapping[workflow_label].startswith('read'):
+                data_set = dataSetClient.show_dataset(dataset_id=list_mapping[workflow_label],)
+            else:
+                   data_set = {'id': list_mapping[workflow_label], 'name': list_mapping[workflow_label], 'hda_ldda': 'hda'}
         else:
-            data_set = {'id': d, 'name': d, 'hda_ldda': 'hda'}
-        print "Workflow requesting %s assigning %s:%s " % (workflow['inputs'][w]['label'], data_set['name'], data_set['id'])
+            print "Workflow requesting '%s' unsure what to assign. Choices I have: %s" % (workflow_label, ",".join(list_mapping.keys()))
+            labels = ""
+            for x in workflow_input_keys:
+                labels += "%s: ," %(workflow['inputs'][x]['label'],)
+            print "Workflow would like the following inputs please adjust your config.ini file %s" % (labels)
+            sys.exit(1)
         dm[w]={'id':data_set['id'],'src':data_set['hda_ldda']}
     return dm
 
@@ -53,7 +66,15 @@ def get_files(root_path):
           matches.append(os.path.join(root, filename))
     return matches
 parser = SafeConfigParser()
-parser.read('configuration.ini')
+
+if len(sys.argv) == 2:
+    if sys.argv[1].endswith('.ini'):
+        parser.read(sys.argv[1])
+    else:
+        print "You passed %s I need a .ini file" %(sys.argv[1],)
+        sys.exit(1)
+else:
+    parser.read('configuration.ini')
 api_key = get_api_key(parser.get('Globals', 'api_file'))
 galaxy_host = parser.get('Globals', 'galaxy_host')
 
