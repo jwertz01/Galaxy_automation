@@ -31,7 +31,7 @@ def parse_sample_name(file_path):
         return 'Unable_to_parse'
 
 
-def setup_base_datamap():
+def setup_base_datamap(current_history,r1_id,r2_id):
     oto_wf_id = parser.get('Globals','oto_wf_id')
     dataset_list = parser.get('Globals', 'input_ids').split(',')
     list_mapping = {}
@@ -43,13 +43,20 @@ def setup_base_datamap():
     assert len(workflow_input_keys) == len(dataset_list)
     dm = {}
     for w in workflow_input_keys:
+        data_set=[]
         workflow_label = workflow['inputs'][w]['label']
         #find mapping if present
         if list_mapping.has_key(workflow_label):
             if not list_mapping[workflow_label].startswith('read'):
-                data_set = dataSetClient.show_dataset(dataset_id=list_mapping[workflow_label],)
+                prep = historyClient.upload_dataset_from_library(current_history,list_mapping[workflow_label])
+                data_set = dataSetClient.show_dataset(dataset_id=prep['id'])
+            elif list_mapping[workflow_label].startswith('read1'):
+                data_set = {'id': r1_id, 'name': list_mapping[workflow_label], 'hda_ldda': 'hda'}
+            elif list_mapping[workflow_label].startswith('read2'):
+                data_set = {'id': r1_id, 'name': list_mapping[workflow_label], 'hda_ldda': 'hda'}
             else:
-                data_set = {'id': list_mapping[workflow_label], 'name': list_mapping[workflow_label], 'hda_ldda': 'hda'}
+                print "mapping error "
+                sys.exit(1)
         else:
             print "Workflow requesting '%s' unsure what to assign. Choices I have: %s" % (workflow_label, ",".join(list_mapping.keys()))
             labels = ""
@@ -89,7 +96,6 @@ toolClient = ToolClient(galaxyInstance)
 workflowClient = WorkflowClient(galaxyInstance)
 dataSetClient = DatasetClient(galaxyInstance)
 
-generic_data_map = setup_base_datamap()
 files = get_files(parser.get('Globals','fastq_dir'))
 if len(files) == 0:
         print "Not able to find any fastq files looked in %s" %(parser.get('Globals', 'fastq_dir'))
@@ -99,7 +105,6 @@ else:
     files_to_keep = {}
     for R1 in files:
         input_dir_path = os.path.dirname(R1)
-        data_map = copy.deepcopy(generic_data_map)
         R2 = R1.replace('R1','R2')
         if not os.path.exists(R1):
             print "%s File Not Found" % (R1, )
@@ -110,24 +115,19 @@ else:
         sampleName = parse_sample_name(R1)
         print "Running %s and %s with name %s" %(R1,R2,sampleName)
         history = historyClient.create_history(sampleName)
-        print data_map
         R1 = toolClient.upload_file(R1, history['id'], file_type='fastqsanger',dbkey=parser.get('Globals','genome'))
         R2 = toolClient.upload_file(R2, history['id'], file_type='fastqsanger',dbkey=parser.get('Globals','genome'))
-
-        for d in data_map.keys():
-                if data_map[d]['id'] == 'read1':
-                    data_map[d]['id'] = R1['outputs'][0]['id']
-                elif data_map[d]['id'] == 'read2':
-                    data_map[d]['id'] = R2['outputs'][0]['id']
+        data_map = setup_base_datamap(history['id'],R1['outputs'][0]['id'],R2['outputs'][0]['id'])
 
         # Have files in place need to set up workflow
         # Based on example at http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
         rep_params = {'SAMPLE_ID': sampleName}
         print sampleName
         params = {}
+        print data_map
         rwf = workflowClient.run_workflow(parser.get('Globals','oto_wf_id'),
                                           data_map, params=params, history_id=history['id'],
-                                          replacement_params=rep_params,import_inputs_to_history=True)
+                                          replacement_params=rep_params)
         for output in rwf['outputs']:
             data_set = dataSetClient.show_dataset(dataset_id=output,)
             if sampleName == data_set['name'].split('.')[0]:
