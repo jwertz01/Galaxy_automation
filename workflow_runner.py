@@ -127,7 +127,7 @@ else:
         params = {}
         rwf = workflowClient.run_workflow(parser.get('Globals','oto_wf_id'),
                                           data_map, params=params, history_id=history['id'],
-                                          replacement_params=rep_params)
+                                          replacement_params=rep_params,import_inputs_to_history=True)
         for output in rwf['outputs']:
             data_set = dataSetClient.show_dataset(dataset_id=output,)
             if sampleName == data_set['name'].split('.')[0]:
