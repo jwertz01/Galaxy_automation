@@ -12,7 +12,7 @@ def get_api_key(file_name):
 
 parser = SafeConfigParser()
 
-if len(sys.argv) == 2:
+if len(sys.argv) >= 2:
     if sys.argv[1].endswith('.ini'):
         parser.read(sys.argv[1])
     else:
@@ -27,11 +27,9 @@ api_key = get_api_key(parser.get('Globals', 'api_file'))
 galaxy_host = parser.get('Globals', 'galaxy_host')
 galaxyInstance = GalaxyInstance(galaxy_host, key=api_key)
 libraryInstance = LibraryClient(galaxyInstance)
-libs = libraryInstance.get_libraries(name='Smith Lab')
+libs = libraryInstance.get_libraries(name=parser.get('Globals','default_lib'))
 details = libraryInstance.get_folders(library_id=libs[0]['id'])
-print details
 folder = libraryInstance.show_library(library_id=libs[0]['id'],contents=True)
-print len(folder)
 for f in folder[1:]:
     print "%s:%s" % (f['name'],f['id'])
 

@@ -14,6 +14,7 @@ import os.path
 from ConfigParser import SafeConfigParser
 import re
 import time
+import requests
 import copy
 
 
@@ -53,7 +54,7 @@ def setup_base_datamap(current_history,r1_id,r2_id):
             elif list_mapping[workflow_label].startswith('read1'):
                 data_set = {'id': r1_id, 'name': list_mapping[workflow_label], 'hda_ldda': 'hda'}
             elif list_mapping[workflow_label].startswith('read2'):
-                data_set = {'id': r1_id, 'name': list_mapping[workflow_label], 'hda_ldda': 'hda'}
+                data_set = {'id': r2_id, 'name': list_mapping[workflow_label], 'hda_ldda': 'hda'}
             else:
                 print "mapping error "
                 sys.exit(1)
@@ -67,12 +68,35 @@ def setup_base_datamap(current_history,r1_id,r2_id):
         dm[w]={'id':data_set['id'],'src':data_set['hda_ldda']}
     return dm
 
+def getNotes():
+    #return a string that describes this particular setup
+    notes = []
+    inputs = parser.get('Globals','input_ids').split(',')
+    files = []
+    for i in inputs:
+            name,file = i.split(':')
+            files.append(file)
+    notes.append("Files:"+",".join(files))
+    oto_wf_id = parser.get('Globals','oto_wf_id')
+    notes.append("Workflow_id:"+oto_wf_id)
+    #workflow = workflowClient.show_workflow(oto_wf_id)
+    #notes.append(",".join(workflow))
+    return ":".join(notes)
+
+def changePath(old_path):
+        #get where to write and root
+        old_root = parser.get('Globals','fastq_dir')
+        new_root = parser.get('Globals','output_dir')
+        new_path = old_path.replace(old_root,new_root)
+        return new_path
+
 def get_files(root_path):
     matches = []
     for root, dirnames, filenames in os.walk(root_path):
       for filename in fnmatch.filter(filenames, '*R1*fastq.gz'):
           matches.append(os.path.join(root, filename))
     return matches
+
 parser = SafeConfigParser()
 
 if len(sys.argv) == 2:
@@ -104,7 +128,7 @@ else:
     print ",".join(files)
     files_to_keep = {}
     for R1 in files:
-        input_dir_path = os.path.dirname(R1)
+        input_dir_path = os.path.dirname(R1)+"/"
         R2 = R1.replace('R1','R2')
         if not os.path.exists(R1):
             print "%s File Not Found" % (R1, )
@@ -121,7 +145,8 @@ else:
 
         # Have files in place need to set up workflow
         # Based on example at http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
-        rep_params = {'SAMPLE_ID': sampleName}
+        print getNotes()
+        rep_params = {'SAMPLE_ID': sampleName,'WORKFLOW_NOTES':getNotes()}
         print sampleName
         params = {}
         print data_map
@@ -134,6 +159,7 @@ else:
                 if not files_to_keep.has_key(input_dir_path):
                     files_to_keep[input_dir_path]=[]
                 files_to_keep[input_dir_path].append(output)
+sys.exit() # put in to cope with the lack of the download api working
 timestr = time.strftime("%Y%m%d-%H%M%S")
 fh = open(timestr, 'w')
 for path in files_to_keep:
@@ -146,7 +172,15 @@ for path in files_to_keep:
         for output in files_to_keep[path]:
             data_set = dataSetClient.show_dataset(dataset_id=output,)
             if data_set['state'] == 'ok':
-                #download = dataSetClient.download_dataset(output,file_path=path,use_default_filename=True,wait_for_completion=True,maxwait=600)
-                retrieved.append("test")
+                new_path = changePath(path)
+                new_path = os.path.join(new_path,data_set['name'])
+                print data_set
+                print new_path
+                try:
+                    download = dataSetClient.download_dataset(output,file_path=new_path,use_default_filename=False,wait_for_completion=True,maxwait=600)
+                    print download
+                    retrieved.append(data_set['id'])
+                except Exception as e:
+                    print "%s" %(e,)
     time.sleep(120)
 os.remove(timestr)
