@@ -3,6 +3,7 @@ import sys
 
 from bioblend.galaxy import GalaxyInstance
 from bioblend.galaxy.libraries import LibraryClient
+from bioblend.galaxy.workflows import WorkflowClient
 from ConfigParser import SafeConfigParser
 
 def get_api_key(file_name):
@@ -33,4 +34,10 @@ folder = libraryInstance.show_library(library_id=libs[0]['id'],contents=True)
 for f in folder[1:]:
     print "%s:%s" % (f['name'],f['id'])
 
+workflow = WorkflowClient(galaxyInstance)
+wf = workflow.get_workflows()
+for w in wf:
+    print w['id']
+    print w['name']
+    print w['owner']
 
