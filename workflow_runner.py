@@ -102,8 +102,12 @@ def import_library_datasets(current_history):
     library_datasets = {}
     for data in library_dataset_list:
         key, value = data.split(':')
+        print "Uploading " + key + " from library " + default_lib + " -> " + value
         library_file_dataset = historyClient.upload_dataset_from_library(
             current_history, value)
+        # Lets make the datasets un-deleted. Unclear why they have them marked as deleted when they import.
+        status_code = historyClient.update_dataset(current_history, library_file_dataset['id'], deleted=False)
+        print library_file_dataset
         library_datasets[key] = library_file_dataset
     return library_datasets
 
@@ -249,6 +253,7 @@ else:
     batchName = os.path.basename(fastq_root)
     upload_history = historyClient.create_history(batchName)
     library_datasets = import_library_datasets(upload_history['id'])
+    sys.exit()
 
     # Upload the files needed for the workflow, and kick it off
     print "Found fastq files running workflow for the following files (R2's will be added)"
