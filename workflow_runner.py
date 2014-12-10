@@ -7,6 +7,7 @@ from bioblend.galaxy.histories import HistoryClient
 from bioblend.galaxy.tools import ToolClient
 from bioblend.galaxy.workflows import WorkflowClient
 from bioblend.galaxy.datasets import DatasetClient
+from bioblend.galaxy.client import ConnectionError
 import sys
 import os
 import fnmatch
@@ -15,6 +16,7 @@ from ConfigParser import SafeConfigParser
 import re
 import time
 import json
+from requests.packages import urllib3
 
 
 def get_api_key(file_name):
@@ -172,6 +174,13 @@ def get_files(root_path):
 
 # Main Runner Logic Starts Here
 
+# Disable Warnings. Without this a warning such as the following is generated:
+# /Library/Python/2.7/site-packages/requests/packages/urllib3/connectionpool.py:734: 
+# InsecureRequestWarning: Unverified HTTPS request is being made. Adding certificate verification is strongly advised. 
+# See: https://urllib3.readthedocs.org/en/latest/security.html
+# At some point we might want to allow this warning instead, or fix up the cause.
+urllib3.disable_warnings()
+
 known_globals = ["RUN_SUMMARY", "SAMPLE_RE"]
 
 parser = SafeConfigParser()
@@ -226,13 +235,20 @@ else:
     for data in upload_dataset_list:
         key, value = data.split(':')
         upload_list_mapping[key] = value
-    workflow = workflowClient.show_workflow(oto_wf_id)
-    workflow_input_keys = workflow['inputs'].keys()
+    try:
+        workflow = workflowClient.show_workflow(oto_wf_id)
+        workflow_input_keys = workflow['inputs'].keys()
+    except ConnectionError:
+        print "Error in retrieving Workflow Information from Galaxy.  Please verfiy the workflow id and Galaxy URL provided in the configuration file."
+        sys.exit()
+    except ValueError:
+        print "Error in retrieving Workflow information from Galaxy.  Please verify your API Key is accurate."
+        sys.exit()
     assert len(workflow_input_keys) == len(upload_dataset_list) + len(library_dataset_list)
 
     batchName = os.path.basename(fastq_root)
     upload_history = historyClient.create_history(batchName)
-    library_datasets = import_library_datasets(upload_history)
+    library_datasets = import_library_datasets(upload_history['id'])
 
     # Upload the files needed for the workflow, and kick it off
     print "Found fastq files running workflow for the following files (R2's will be added)"
