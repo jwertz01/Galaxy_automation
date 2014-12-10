@@ -52,6 +52,7 @@ def setup_base_datamap(current_history, run_history, r1_id, r2_id):
     dm = {}
     for w in workflow_input_keys:
         data_set = []
+        global workflow_label
         workflow_label = workflow['inputs'][w]['label']
         # find mapping if present
         if workflow_label in library_list_mapping:
@@ -142,7 +143,7 @@ def getNotes():
                 dataset_name = dataset['name']
                 dataset_id = READ2['id']
                 dataset_file = R2_file
-            notes.append(w + " : " + dataset_name + " (" + dataset_id + ") " + dataset_file)
+            notes.append(w + ": " + dataset_name + " (" + dataset_id + ") " + dataset_file)
 
 #    files = []
 #    for i in inputs:
@@ -173,8 +174,9 @@ def get_files(root_path):
             matches.append(os.path.join(root, filename))
     return matches
 
-
+############################################################################################
 # Main Runner Logic Starts Here
+############################################################################################
 
 # Disable Warnings. Without this a warning such as the following is generated:
 # /Library/Python/2.7/site-packages/requests/packages/urllib3/connectionpool.py:734: 
@@ -215,6 +217,11 @@ toolClient = ToolClient(galaxyInstance)
 workflowClient = WorkflowClient(galaxyInstance)
 dataSetClient = DatasetClient(galaxyInstance)
 
+workflow_label = ""
+
+print ""
+print "Locating fastq files.  Searching the following directory (and child directories): "
+print "\t" + fastq_root 
 files = get_files(fastq_root)
 if len(files) == 0:
     print "Not able to find any fastq files looked in %s" % (fastq_root)
@@ -226,8 +233,12 @@ else:
     # First lets open up some output files.
     # Lets store these in the output directory for now.  Possibly move at a later time?
 
-    run_log = open(os.path.join(output_dir, "GalaxyAutomation.log"), "wb")
-    history_json = open(os.path.join(output_dir, "Histories.json"), "wb")
+    run_log = open(os.path.join(output_dir, "GalaxyAutomationRun.log"), "wb")
+    result_history_json = open(os.path.join(output_dir, "Result_Histories.json"), "wb")
+    all_history_json = open(os.path.join(output_dir, "All_Histories.json"), "wb")
+
+    result_histories = []
+    all_histories = []
 
     library_list_mapping = {}
     upload_list_mapping = {}
@@ -250,11 +261,12 @@ else:
 
     batchName = os.path.basename(fastq_root)
     upload_history = historyClient.create_history(batchName)
+    all_histories.append(upload_history)
     library_datasets = import_library_datasets(upload_history['id'])
 
     # Upload the files needed for the workflow, and kick it off
-    print "Found fastq files running workflow for the following files (R2's will be added)"
-    print ",".join(files)
+    print "Located " + str(len(files)) + " R1 fastq files for processing (will find pair R2 file):"
+    print "\t" + "\n\t".join(files)
     files_to_keep = {}
     for R1_file in files:
         input_dir_path = os.path.dirname(R1_file) + os.path.sep
@@ -269,8 +281,14 @@ else:
         sample_dir = os.path.basename(os.path.dirname(R1_file))
         result_dir = os.path.join(input_dir_path, "results")
 
-        print "Uploading %s and %s with Sample name %s" % (R1_file, R2_file, sampleName)
+        print ""
+        print "Uploading Sample : " + sampleName
+        print "\tR1 File: " + R1_file
+        print "\tR2 File: " + R2_file
+      
         history = historyClient.create_history(sampleName)
+        all_histories.append(history)
+        result_histories.append(history)
         R1 = toolClient.upload_file(
             R1_file, upload_history['id'], file_type='fastqsanger', dbkey=genome)
         R2 = toolClient.upload_file(
@@ -285,18 +303,17 @@ else:
         # Based on example at
         # http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
         notes = getNotes()
-        print "\n".join(notes)
+        print ""
+        print "Launching Workflow: "
+        print "\t" + "\n\t".join(notes)
         rep_params = {'SAMPLE_ID': sampleName, 'WORKFLOW_NOTES': ",".join(notes)}
-        print sampleName
         params = {}
-        print data_map
         rwf = workflowClient.run_workflow(oto_wf_id,
                                           data_map, params=params, history_id=history[
                                               'id'],
                                           replacement_params=rep_params,
                                           import_inputs_to_history=False)
-        history_json.write(json.dumps(history))
-        run_log.write("Workflow Automation for Sample: " + "sampleName" + "\n")
+        run_log.write("Workflow Automation for Sample: " + sampleName + "\n")
         for n in notes:
             run_log.write("\t" + n + "\n")
         for output in rwf['outputs']:
@@ -305,6 +322,23 @@ else:
                 if not input_dir_path in files_to_keep:
                     files_to_keep[input_dir_path] = []
                 files_to_keep[input_dir_path].append(output)
+
+all_history_json.write(json.dumps(all_histories))
+result_history_json.write(json.dumps(result_histories))
+result_history_json.flush()
+result_history_json.close()
+all_history_json.flush()
+all_history_json.close()
+run_log.flush()
+run_log.close()
+print ""
+print "Number of samples found: " + str(len(files))
+print "Workflow, " + workflow_label + ", has been launched for all samples."
+print "You can view history status by invoking the following command:"
+print "\t>> python history_status.py <myConfiguration.ini>"
+print ""
+print "A log of all samples processed and their inputs can be found here:" + run_log
+print ""
 sys.exit()  # put in to cope with the lack of the download api working
 timestr = time.strftime("%Y%m%d-%H%M%S")
 fh = open(timestr, 'w')
