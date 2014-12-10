@@ -57,7 +57,7 @@ def setup_base_datamap(current_history, run_history, r1_id, r2_id):
         if workflow_label in library_list_mapping:
             global library_datasets
             if not workflow_label in known_globals:
-                data_set = dataSetClient.show_dataset(dataset_id=library_datasets[key]['id'])
+                data_set = dataSetClient.show_dataset(dataset_id=library_datasets[workflow_label]['id'])
         elif workflow_label in upload_list_mapping:
             # This would need to be augmented if there are other types of uploads needed
             if upload_list_mapping[workflow_label].startswith('READ1'):
@@ -102,12 +102,10 @@ def import_library_datasets(current_history):
     library_datasets = {}
     for data in library_dataset_list:
         key, value = data.split(':')
-        print "Uploading " + key + " from library " + default_lib + " -> " + value
         library_file_dataset = historyClient.upload_dataset_from_library(
             current_history, value)
         # Lets make the datasets un-deleted. Unclear why they have them marked as deleted when they import.
         status_code = historyClient.update_dataset(current_history, library_file_dataset['id'], deleted=False)
-        print library_file_dataset
         library_datasets[key] = library_file_dataset
     return library_datasets
 
@@ -201,7 +199,7 @@ else:
 # Get the configuration parmaters
 api_key = get_api_key(parser.get('Globals', 'api_file'))
 galaxy_host = parser.get('Globals', 'galaxy_host')
-file_name_re = re.compile(parser.get('Globals', 'SAMPLE_RE'))
+file_name_re = re.compile(parser.get('Globals', 'sample_re'))
 library_dataset_list = parser.get('Globals', 'library_input_ids').split(',')
 upload_dataset_list = parser.get('Globals', 'upload_input_ids').split(',')
 fastq_root = parser.get('Globals', 'fastq_dir')
@@ -253,7 +251,6 @@ else:
     batchName = os.path.basename(fastq_root)
     upload_history = historyClient.create_history(batchName)
     library_datasets = import_library_datasets(upload_history['id'])
-    sys.exit()
 
     # Upload the files needed for the workflow, and kick it off
     print "Found fastq files running workflow for the following files (R2's will be added)"
@@ -272,7 +269,7 @@ else:
         sample_dir = os.path.basename(os.path.dirname(R1_file))
         result_dir = os.path.join(input_dir_path, "results")
 
-        print "Running %s and %s with name %s" % (R1_file, R2_file, sampleName)
+        print "Uploading %s and %s with Sample name %s" % (R1_file, R2_file, sampleName)
         history = historyClient.create_history(sampleName)
         R1 = toolClient.upload_file(
             R1_file, upload_history['id'], file_type='fastqsanger', dbkey=genome)
