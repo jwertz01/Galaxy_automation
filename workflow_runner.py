@@ -264,13 +264,13 @@ else:
         print "Launching Workflow: "
         print "\t" + "\n\t".join(notes)
         rep_params = {'SAMPLE_ID': sampleName, 'WORKFLOW_NOTES': ",".join(notes)}
-        params = {'toolshed.g2.bx.psu.edu/repos/devteam/bwa_wrappers/bwa_wrapper/1.2.3': [{'param': 'rgsm', 'value': sampleName},
-                                                                                          {'param': 'rgid', 'value': sampleName},
-                                                                                          {'param': 'rgld', 'value': sampleName}],
-                  'annotation_v2_wrapper': {'param': 'input_notes', 'value': ",".join(notes)}}
+        params = {'toolshed.g2.bx.psu.edu/repos/devteam/bwa_wrappers/bwa_wrapper/1.2.3': {'rgsm', sampleName,
+                                                                                          'rgid', sampleName,
+                                                                                          'rgld', sampleName},
+                  'annotation_v2_wrapper': {'input_notes', ",".join(notes)}}
         params = {}
         rwf = workflowClient.run_workflow(oto_wf_id,
-                                          data_map, params=params, 
+                                          data_map, params=params,
                                           history_id=history['id'],
                                           replacement_params=rep_params,
                                           import_inputs_to_history=False)
