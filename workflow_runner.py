@@ -34,21 +34,6 @@ def parse_sample_name(file_path):
 
 
 def setup_base_datamap(current_history, run_history, r1_id, r2_id):
- #   oto_wf_id = parser.get('Globals', 'oto_wf_id')
- #   library_dataset_list = parser.get('Globals', 'library_input_ids').split(',')
- #   upload_dataset_list = parser.get('Globals', 'upload_input_ids').split(',')
- #   library_list_mapping = {}
- #   upload_list_mapping = {}
- #   for data in library_dataset_list:
- #       key, value = data.split(':')
- #       library_list_mapping[key] = value
- #   for data in upload_dataset_list:
- #       key, value = data.split(':')
- #       upload_list_mapping[key] = value
- #   workflow = workflowClient.show_workflow(oto_wf_id)
- #   workflow_input_keys = workflow['inputs'].keys()
- #   assert len(workflow_input_keys) == len(upload_dataset_list) + len(library_dataset_list)
-
     dm = {}
     for w in workflow_input_keys:
         data_set = []
@@ -60,7 +45,8 @@ def setup_base_datamap(current_history, run_history, r1_id, r2_id):
             if not workflow_label in known_globals:
                 data_set = dataSetClient.show_dataset(dataset_id=library_datasets[workflow_label]['id'])
         elif workflow_label in upload_list_mapping:
-            # This would need to be augmented if there are other types of uploads needed
+            # This would need to be augmented if there are other types of
+            # uploads needed
             if upload_list_mapping[workflow_label].startswith('READ1'):
                 data_set = {
                     'id': r1_id, 'name': upload_list_mapping[workflow_label], 'hda_ldda': 'hda'}
@@ -74,27 +60,6 @@ def setup_base_datamap(current_history, run_history, r1_id, r2_id):
                 labels += "%s: ," % (workflow['inputs'][x]['label'],)
             print "Workflow would like the following inputs please adjust your config.ini file %s" % (labels)
             sys.exit(1)
-#        if list_mapping.has_key(workflow_label):
-#            if not list_mapping[workflow_label].startswith('read'):
-#                prep = historyClient.upload_dataset_from_library(
-#                    current_history, list_mapping[workflow_label])
-#                data_set = dataSetClient.show_dataset(dataset_id=prep['id'])
-#            elif list_mapping[workflow_label].startswith('read1'):
-#                data_set = {
-#                    'id': r1_id, 'name': list_mapping[workflow_label], 'hda_ldda': 'hda'}
-#            elif list_mapping[workflow_label].startswith('read2'):
-#                data_set = {
-#                    'id': r2_id, 'name': list_mapping[workflow_label], 'hda_ldda': 'hda'}
-#            else:
-#                print "mapping error "
-#                sys.exit(1)
-#        else:
-#            print "Workflow requesting '%s' unsure what to assign. Choices I have: %s" % (workflow_label, ",".join(list_mapping.keys()))
-#            labels = ""
-#            for x in workflow_input_keys:
-#                labels += "%s: ," % (workflow['inputs'][x]['label'],)
-#            print "Workflow would like the following inputs please adjust your config.ini file %s" % (labels)
-#            sys.exit(1)
         dm[w] = {'id': data_set['id'], 'src': data_set['hda_ldda']}
     return dm
 
@@ -105,7 +70,8 @@ def import_library_datasets(current_history):
         key, value = data.split(':')
         library_file_dataset = historyClient.upload_dataset_from_library(
             current_history, value)
-        # Lets make the datasets un-deleted. Unclear why they have them marked as deleted when they import.
+        # Lets make the datasets un-deleted. Unclear why they have them marked
+        # as deleted when they import.
         status_code = historyClient.update_dataset(current_history, library_file_dataset['id'], deleted=False)
         library_datasets[key] = library_file_dataset
     return library_datasets
@@ -144,16 +110,6 @@ def getNotes():
                 dataset_id = READ2['id']
                 dataset_file = R2_file
             notes.append(w + ": " + dataset_name + " (" + dataset_id + ") " + dataset_file)
-
-#    files = []
-#    for i in inputs:
-#        name, file = i.split(':')
-#        files.append(file)
-#    notes.append("Files:" + ",".join(files))
-#    notes.append("Workflow_id:" + oto_wf_id)
-#    #workflow = workflowClient.show_workflow(oto_wf_id)
-#    # notes.append(",".join(workflow))
-#    return ":".join(notes)
     return notes
 
 
@@ -174,13 +130,13 @@ def get_files(root_path):
             matches.append(os.path.join(root, filename))
     return matches
 
-############################################################################################
+##########################################################################
 # Main Runner Logic Starts Here
-############################################################################################
+##########################################################################
 
 # Disable Warnings. Without this a warning such as the following is generated:
-# /Library/Python/2.7/site-packages/requests/packages/urllib3/connectionpool.py:734: 
-# InsecureRequestWarning: Unverified HTTPS request is being made. Adding certificate verification is strongly advised. 
+# /Library/Python/2.7/site-packages/requests/packages/urllib3/connectionpool.py:734:
+# InsecureRequestWarning: Unverified HTTPS request is being made. Adding certificate verification is strongly advised.
 # See: https://urllib3.readthedocs.org/en/latest/security.html
 # At some point we might want to allow this warning instead, or fix up the cause.
 urllib3.disable_warnings()
@@ -221,7 +177,7 @@ workflow_label = ""
 
 print ""
 print "Locating fastq files.  Searching the following directory (and child directories): "
-print "\t" + fastq_root 
+print "\t" + fastq_root
 files = get_files(fastq_root)
 if len(files) == 0:
     print "Not able to find any fastq files looked in %s" % (fastq_root)
@@ -231,7 +187,8 @@ else:
     # upload.
 
     # First lets open up some output files.
-    # Lets store these in the output directory for now.  Possibly move at a later time?
+    # Lets store these in the output directory for now.  Possibly move at a
+    # later time?
 
     run_log = open(os.path.join(output_dir, "GalaxyAutomationRun.log"), "wb")
     result_history_json = open(os.path.join(output_dir, "Result_Histories.json"), "wb")
@@ -285,7 +242,7 @@ else:
         print "Uploading Sample : " + sampleName
         print "\tR1 File: " + R1_file
         print "\tR2 File: " + R2_file
-      
+
         history = historyClient.create_history(sampleName)
         all_histories.append(history)
         result_histories.append(history)
@@ -307,6 +264,10 @@ else:
         print "Launching Workflow: "
         print "\t" + "\n\t".join(notes)
         rep_params = {'SAMPLE_ID': sampleName, 'WORKFLOW_NOTES': ",".join(notes)}
+        params = {'toolshed.g2.bx.psu.edu/repos/devteam/bwa_wrappers/bwa_wrapper/1.2.3': [{'param': 'rgsm', 'value': sampleName},
+                                                                                          {'parm': 'rgid', 'value': sampleName},
+                                                                                          {'param': 'rgld', 'value': sampleName}],
+                  'annotation_v2_wrapper': {'param': 'input_notes', 'value': ",".join(notes)}}
         params = {}
         rwf = workflowClient.run_workflow(oto_wf_id,
                                           data_map, params=params, history_id=history[
