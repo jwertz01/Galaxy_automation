@@ -268,7 +268,6 @@ else:
                                                                                           'rgid', sampleName,
                                                                                           'rgld', sampleName},
                   'annotation_v2_wrapper': {'input_notes', ",".join(notes)}}
-        params = {}
         rwf = workflowClient.run_workflow(oto_wf_id,
                                           data_map, params=params,
                                           history_id=history['id'],
@@ -298,7 +297,7 @@ print "Workflow, " + workflow_label + ", has been launched for all samples."
 print "You can view history status by invoking the following command:"
 print "\t>> python history_status.py <myConfiguration.ini>"
 print ""
-print "A log of all samples processed and their inputs can be found here:" + run_log
+print "A log of all samples processed and their inputs can be found here:" + str(run_log)
 print ""
 sys.exit()  # put in to cope with the lack of the download api working
 timestr = time.strftime("%Y%m%d-%H%M%S")
