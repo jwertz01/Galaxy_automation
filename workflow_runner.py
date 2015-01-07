@@ -1,5 +1,5 @@
 #!/usr/bin/python
-__author__ = 'tbair'
+__author__ = 'tbair,eablck'
 
 
 from bioblend.galaxy import GalaxyInstance
@@ -43,7 +43,8 @@ def setup_base_datamap(current_history, run_history, r1_id, r2_id):
         if workflow_label in library_list_mapping:
             global library_datasets
             if not workflow_label in known_globals:
-                data_set = dataSetClient.show_dataset(dataset_id=library_datasets[workflow_label]['id'])
+                data_set = dataSetClient.show_dataset(
+                    dataset_id=library_datasets[workflow_label]['id'])
         elif workflow_label in upload_list_mapping:
             # This would need to be augmented if there are other types of
             # uploads needed
@@ -72,7 +73,8 @@ def import_library_datasets(current_history):
             current_history, value)
         # Lets make the datasets un-deleted. Unclear why they have them marked
         # as deleted when they import.
-        status_code = historyClient.update_dataset(current_history, library_file_dataset['id'], deleted=False)
+        status_code = historyClient.update_dataset(
+            current_history, library_file_dataset['id'], deleted=False)
         library_datasets[key] = library_file_dataset
     return library_datasets
 
@@ -85,7 +87,8 @@ def getNotes():
     notes.append("Upload History Name: " + upload_history['name'])
     notes.append("History Name: " + upload_history['name'])
 
-    notes.append("Workflow Name (id): " + workflow['name'] + " (" + oto_wf_id + ")")
+    notes.append(
+        "Workflow Name (id): " + workflow['name'] + " (" + oto_wf_id + ")")
     notes.append("Workflow Runtime Inputs >> ")
     for w in workflow_input_keys:
         dataset_name = ""
@@ -96,9 +99,11 @@ def getNotes():
             if not workflow_label in known_globals:
                 dataset_name = library_datasets[workflow_label]['name']
                 dataset_id = library_datasets[workflow_label]['id']
-                notes.append(w + ": " + default_lib + os.path.sep + dataset_name + " (" + dataset_id + ")")
+                notes.append(
+                    w + ": " + default_lib + os.path.sep + dataset_name + " (" + dataset_id + ")")
         elif workflow_label in upload_list_mapping:
-            # This would need to be augmented if there are other types of uploads needed
+            # This would need to be augmented if there are other types of
+            # uploads needed
             if upload_list_mapping[workflow_label].startswith('READ1'):
                 dataset = dataSetClient.show_dataset(READ1['id'])
                 dataset_name = dataset['name']
@@ -109,7 +114,8 @@ def getNotes():
                 dataset_name = dataset['name']
                 dataset_id = READ2['id']
                 dataset_file = R2_file
-            notes.append(w + ": " + dataset_name + " (" + dataset_id + ") " + dataset_file)
+            notes.append(
+                w + ": " + dataset_name + " (" + dataset_id + ") " + dataset_file)
     return notes
 
 
@@ -138,7 +144,8 @@ def get_files(root_path):
 # /Library/Python/2.7/site-packages/requests/packages/urllib3/connectionpool.py:734:
 # InsecureRequestWarning: Unverified HTTPS request is being made. Adding certificate verification is strongly advised.
 # See: https://urllib3.readthedocs.org/en/latest/security.html
-# At some point we might want to allow this warning instead, or fix up the cause.
+# At some point we might want to allow this warning instead, or fix up the
+# cause.
 urllib3.disable_warnings()
 
 known_globals = ["RUN_SUMMARY", "SAMPLE_RE"]
@@ -182,17 +189,25 @@ files = get_files(fastq_root)
 if len(files) == 0:
     print "Not able to find any fastq files looked in %s" % (fastq_root)
 else:
-
-    # Files have been found.  Lets create a common history and use it to
-    # upload.
+    # Fastq files have been found, lets try to prep for running workflows.
 
     # First lets open up some output files.
     # Lets store these in the output directory for now.  Possibly move at a
     # later time?
 
+    # Run log will contain a history of files uploaded and the workflow kicked
+    # off (including parameters)
     run_log = open(os.path.join(output_dir, "GalaxyAutomationRun.log"), "wb")
-    result_history_json = open(os.path.join(output_dir, "Result_Histories.json"), "wb")
-    all_history_json = open(os.path.join(output_dir, "All_Histories.json"), "wb")
+    # Result_History.json will store serialized history objects for each sample's history that contains
+    # workflow results specific to that history.  This will be used to
+    # automate downloads.
+    result_history_json = open(
+        os.path.join(output_dir, "Result_Histories.json"), "wb")
+    # All_Histories.json will store serialized history objets for every history (inlucding upload history)
+    # such that history status script can be run and give status updates about all histories involved
+    # for the batch.
+    all_history_json = open(
+        os.path.join(output_dir, "All_Histories.json"), "wb")
 
     result_histories = []
     all_histories = []
@@ -214,8 +229,12 @@ else:
     except ValueError:
         print "Error in retrieving Workflow information from Galaxy.  Please verify your API Key is accurate."
         sys.exit()
-    assert len(workflow_input_keys) == len(upload_dataset_list) + len(library_dataset_list)
+    assert len(workflow_input_keys) == len(
+        upload_dataset_list) + len(library_dataset_list)
 
+    # Files have been found.  Lets create a common history and use it to
+    # upload all inputs and all data library input files.  A new history
+    # will be created for each sample workflow run to store only results.
     batchName = os.path.basename(fastq_root)
     upload_history = historyClient.create_history(batchName)
     all_histories.append(upload_history)
@@ -263,13 +282,20 @@ else:
         print ""
         print "Launching Workflow: "
         print "\t" + "\n\t".join(notes)
-        rep_params = {'SAMPLE_ID': sampleName, 'WORKFLOW_NOTES': ",".join(notes)}
-        params = {'toolshed.g2.bx.psu.edu/repos/devteam/bwa_wrappers/bwa_wrapper/1.2.3': {'rgsm', sampleName,
-                                                                                          'rgid', sampleName,
-                                                                                          'rgld', sampleName},
-                  'annotation_v2_wrapper': {'input_notes', ",".join(notes)}}
+        workflow_notes = ",".join(notes)
+        rep_params = {
+            'SAMPLE_ID': sampleName, 'WORKFLOW_NOTES': workflow_notes}
+#        params = {'toolshed.g2.bx.psu.edu/repos/devteam/bwa_wrappers/bwa_wrapper/1.2.3': {'params|readGroup|rgid': sampleName,
+#                                                                                          'params|readGroup|rglb': sampleName,
+#                                                                                          'params|readGroup|rgsm': sampleName},
+#                  'annotation_v2_wrapper': {'input_notes': workflow_notes}}
+        params = {'toolshed.g2.bx.psu.edu/repos/devteam/bwa_wrappers/bwa_wrapper/1.2.3': {'params': {'readGroup': {'rgid': sampleName,
+                                                                                                                   'rglb': sampleName,
+                                                                                                                   'rgsm': sampleName}}},
+                  'annotation_v2_wrapper': {'report_selector': {'input_notes': workflow_notes}}}
         rwf = workflowClient.run_workflow(oto_wf_id,
-                                          data_map, params=params,
+                                          data_map,
+                                          params=params,
                                           history_id=history['id'],
                                           replacement_params=rep_params,
                                           import_inputs_to_history=False)
