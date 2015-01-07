@@ -1,4 +1,5 @@
-__author__ = 'tbair'
+#!/usr/bin/python
+__author__ = 'tbair,eablck'
 import sys
 
 from bioblend.galaxy import GalaxyInstance
@@ -34,10 +35,15 @@ folder = libraryInstance.show_library(library_id=libs[0]['id'],contents=True)
 for f in folder[1:]:
     print "%s:%s" % (f['name'],f['id'])
 
-workflow = WorkflowClient(galaxyInstance)
-wf = workflow.get_workflows()
+workflowClient = WorkflowClient(galaxyInstance)
+wf = workflowClient.get_workflows()
 for w in wf:
     print w['id']
     print w['name']
     print w['owner']
+    workflow = workflowClient.show_workflow(w['id'])
+    workflow_input_keys = workflow['inputs'].keys()
+    for wk in workflow_input_keys:
+        print workflow['inputs'][wk]['label']
+        print wk
 
