@@ -99,6 +99,7 @@ all_successful = []
 all_running = []
 all_failed = []
 all_except = []
+all_waiting = []
 
 for h in histories:
     # Example h_status object structures
@@ -132,15 +133,62 @@ for h in histories:
         all_successful.append(history_info)
     elif h_status['state'] == 'running':
         all_running.append(history_info)
+    elif h_status['state'] == 'queued':
+        all_waiting.append(history_info)
     else:
         all_failed.append(history_info)
 
 num_histories = len(histories)
-print "TOTAL Number of Histories: " + str(num_histories) + " ( RUNNING = " + str(len(all_running)) + ", FAILED? = " + str(len(all_failed)) + ", NOT_FOUND = " + str(len(all_except)) + ", COMPLETED (OK) = " + str(len(all_successful)) + " )"
+print "TOTAL Number of Histories: " + str(num_histories) + " ( RUNNING = " + str(len(all_running)) + ", FAILED? = " + str(len(all_failed)) + ", NOT_FOUND = " + str(len(all_except)) + ", COMPLETED (OK) = " + str(len(all_successful)) + ", WAITING TO RUN = " + str(len(all_waiting)) + " )"
+if len(all_except) > 0:
+    print ""
+    print "EXCEPTIONS OCCURRED! Unable to retreive status for " + str(len(all_except)) + " of " + str(num_histories) + " histories."
+    print ""
+    print "\tErrors where thrown by Galaxy when attempting communication about the following histories." 
+    print "\tIn your browser, please check that Galaxy can be connected to, the Galaxy URL provided in the configuration file is accurate,"
+    print "\tand that the following histories exist in your 'Saved Histories' list:"
+    print ""
+    for h in all_except:
+        print "\t\tHISTORY_NAME => "+h['name']
+
+if len(all_failed) > 0:
+    print ""
+    print "FAILURES OCCURRED! NGS Analysis Failed for " + str(len(all_failed)) + " of " + str(num_histories) + " histories."
+    print ""
+    print "\tFailures occurred when attempting the analyze the following samples/histories."
+    print "\tIn your browser, please inspect the following histories and take necessary actions to re-run the NGS analysis:"
+    print ""
+    for h_info in all_failed:
+        print "\t\tHISTORY_NAME => " + h_info.history['name'] + " , REPORTED STATUS => " + h_info.status['state']
+
+if len(all_waiting) > 0:
+    print ""
+    print "WAITING TO RUN. NGS Analysis has not yet started for " + str(len(all_waiting)) + " of " + str(num_histories)
+    print ""
+    for h_info in all_waiting:
+        print "\t\tHISTORY_NAME => " + h_info.history['name'] + " , REPORTED STATUS => " + h_info.status['state']
+
+if len(all_running) > 0:
+    print ""
+    print "ACTIVELY RUNNING. NGS Analysis is currently underway for " + str(len(all_running)) + " of " + str(num_histories)
+    print ""
+    for h_info in all_running:
+        print "\t\tHISTORY_NAME => " + h_info.history['name'] + " , PERCENT COMPLETED => " + str(h_info.status['percent_complete'])
+
+if len(all_successful) > 0:
+    print ""
+    print "COMPLETED.  NGS Analysis is currently completed for " + str(len(all_successful)) + " of " + str(num_histories)
+    print ""
+    print "\tThe following samples/histories have completed NGS analysis ran.  The output will still need to be inspected to ensure analysis accuracy and interpretation:"
+    print ""
+    for h_info in all_successful:
+        print "\t\tHISTORY_NAME => " + h_info.history['name'] + " , PERCENT COMPLETED => " + str(h_info.status['percent_complete'])
 
 
 
 # print h['name'] + " => FINISHED.  ALL Steps completed SUCCESSFULLY."
 
-
+print ""
+print "All status has been retrieved. This command can be re-ran as needed."
+print ""
 sys.exit()
