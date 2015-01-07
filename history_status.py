@@ -90,7 +90,13 @@ if not os.path.isfile(all_history_json_filename):
     sys.exit(2)
 
 all_history_json = open(all_history_json_filename, "rb")
-histories = json.load(all_history_json)
+try:
+    histories = json.load(all_history_json)
+except:
+    print "ERROR: Could not load any history records from All_Hisoties.json file in " + output_dir + "."
+    print "       Did you use the workflow_runner.py to launch the automated Galaxy NGS analysis? Possibly the workflow_runner has not yet completed?"
+    print ""
+    sys.exit(2)
 
 print "Loading List of Histories From : " + all_history_json.name
 print ""
