@@ -12,6 +12,7 @@ import json
 import argparse
 import textwrap
 import subprocess
+import tarfile
 
 
 class HistoryInfo():
@@ -322,12 +323,15 @@ elif args.action == "download":
         print "\t\tExported History from Galaxy, now Downloading and Saving to %s." % (h_output_dir)
         # create a new file for saving history
         historyClient.download_history(h_info.history['id'], jeha_id, history_gz)
+        history_gz.flush()
+        history_gz.close()
+
         download_success = True
         history_dataset_names = []
         try:
-            subprocess.check_call(["tar", "-xzvf", history_gz_name, "-C", h_output_dir])
- #           history_tar = tarfile.open(history_gz_name, 'r:gz')
-#            history_dataset_names = history_tar.getmembers()
+#            subprocess.check_call(["tar", "-xzvf", history_gz_name, "-C", h_output_dir])
+           history_tar = tarfile.open(history_gz_name, 'r:gz')
+           history_dataset_names = history_tar.getmembers()
         except Exception as inst:
             download_success = False
             print ""
@@ -336,7 +340,7 @@ elif args.action == "download":
             print inst
             print ""
         #check the file to make sure it seems sound.
-        if download_success and (len(history_dataset_names) >= 0):
+        if download_success and (len(history_dataset_names) >= 10):
             download_success = True
         else:
             download_success = False
@@ -353,6 +357,20 @@ elif args.action == "download":
             print ""
             historyClient.delete_dataset(h_info.history['id'])
 
+        histor_tar.close()
+    print ""
+    print "The following Histories will NOT be downloaded since they are failed, or waiting, or running:
+    print ""
+    for h_info in all_failed:
+        print "\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => %s" % (h_info.history['name'], h_info.status['state'])
+    for h_info in all_running:
+        print "\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => %s" % (h_info.history['name'], h_info.status['state'])
+    for h_info in all_waiting:
+        print "\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => %s" % (h_info.history['name'], h_info.status['state'])
+    for h in all_except:
+        print "\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => Unknown" % (h['name'])
+
+ 
 elif args.action == "delete":
     #do something here
     print "DELETING ALL COMPLETED HISTORIES."
@@ -398,7 +416,7 @@ elif args.action == "delete":
 
     if args.delete_failed_histories:
         for h_info in all_failed:
-            print "\t\tDeleting Completed (OK) history, %s, in Galaxy." % h_info.history['name']
+            print "\t\tDeleting Failed history, %s, in Galaxy." % h_info.history['name']
             print ""
             historyClient.delete_dataset(h_info.history['id'])
 
