@@ -41,19 +41,12 @@ galaxyInstance = GalaxyInstance(galaxy_host, key=api_key)
 libraryInstance = LibraryClient(galaxyInstance)
 
 print ""
-print "This Library Parser Utility is for help in customizing 'library_input_ids' section of the configuration ini file necessary to run Galaxy Automation."
+print "This Galaxy Parser Utility is for help in customizing 'library_input_ids' and 'workflow_id' section of the configuration ini file necessary to run Galaxy Automation."
 print "It will look up the file names and their Galaxy IDs for the default_library configured in the configuration.ini file"
 print "The Ids returned should be used to match the appropriate library files in Galaxy to the required Galaxy workflow inputs"
 print ""
 print "library_input_ids should be formatted as \'my_workflow_input_name:my_matching_library_file_galaxy_id\'"
 print ""
-
-libs = libraryInstance.get_libraries(name=parser.get('Globals','default_lib'))
-details = libraryInstance.get_folders(library_id=libs[0]['id'])
-folder = libraryInstance.show_library(library_id=libs[0]['id'],contents=True)
-print "LISTING ALL FILES (AND THEIR GALAXY IDs) FOR LIBRARY \'%s\':" % parser.get('Globals','default_lib')
-for f in folder[1:]:
-    print "GALAXY_LIBRARY_FILE_NAME => \'%s\' : GALAXY_LIBRARY_FILE_ID => %s" % (f['name'],f['id'])
 
 workflowClient = WorkflowClient(galaxyInstance)
 wf = workflowClient.get_workflows()
@@ -67,5 +60,13 @@ for w in wf:
     for wk in workflow_input_keys:
         print "\t\tINPUT_NAME => \'%s\' : INPUT_ID => %s" % (workflow['inputs'][wk]['label'], wk)
         
+print ""
+libs = libraryInstance.get_libraries(name=parser.get('Globals','default_lib'))
+details = libraryInstance.get_folders(library_id=libs[0]['id'])
+folder = libraryInstance.show_library(library_id=libs[0]['id'],contents=True)
+print "LISTING ALL FILES (AND THEIR GALAXY IDs) FOR LIBRARY \'%s\':" % parser.get('Globals','default_lib')
+for f in folder[1:]:
+    print "\tGALAXY_LIBRARY_FILE_NAME => \'%s\':GALAXY_LIBRARY_FILE_ID => %s" % (f['name'],f['id'])
+
 print ""
 sys.exit()
