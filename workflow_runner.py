@@ -123,7 +123,7 @@ def getNotes():
 
 def changePath(old_path):
     # get where to write and root
-    new_path = old_path.replace(input_dir, output_dir)
+    new_path = old_path.replace(args.input_dir, output_dir)
     return new_path
 
 
@@ -184,9 +184,6 @@ arg_parser.add_argument('-i', '--ini', help="configuration ini file to load", de
 
 args = arg_parser.parse_args()
 
-input_dir = parser.get('Globals', 'input_dir')
-output_dir = parser.get('Globals', 'output_dir')
-
 config_parser = SafeConfigParser()
 
 if args.ini == 'configuration.ini':
@@ -218,7 +215,7 @@ else:
     print "The configuration ini file must end with .ini, the file specified was %s", (args.ini)
 
 if args.output_dir.startswith('$'):
-    output_dir = os.path.join(args.all_history_dir, "results")
+    output_dir = os.path.join(args.input_dir, "results")
 else:
     output_dir = args.output_dir
 
@@ -230,13 +227,14 @@ if not os.path.exists(output_dir):
 # Get the configuration parmaters
 api_key = get_api_key(config_parser.get('Globals', 'api_file'))
 galaxy_host = config_parser.get('Globals', 'galaxy_host')
-file_name_re = re.compile(parser.get('Globals', 'sample_re'))
-library_dataset_list = config_parser.get('Globals', 'library_input_ids').split(',')
-upload_dataset_list = config_parser.get('Globals', 'upload_input_ids').split(',')
+file_name_re = re.compile(config_parser.get('Globals', 'sample_re'))
+library_input_ids = ''.join(ch for ch in config_parser.get('Globals', 'library_input_ids') if ch != '\n')
+library_dataset_list = library_input_ids.split(',')
+upload_input_ids = ''.join(ch for ch in config_parser.get('Globals', 'upload_input_ids') if ch != '\n')
+upload_dataset_list = upload_input_ids.split(',')
 genome = config_parser.get('Globals', 'genome')
 default_lib = config_parser.get('Globals', 'default_lib')
 workflow_id = config_parser.get('Globals', 'workflow_id')
-
 
 galaxyInstance = GalaxyInstance(galaxy_host, key=api_key)
 historyClient = HistoryClient(galaxyInstance)
@@ -248,10 +246,10 @@ workflow_label = ""
 
 print ""
 print "Locating fastq files.  Searching the following directory (and child directories): "
-print "\t" + input_dir
-files = get_files(input_dir)
+print "\t" + args.input_dir
+files = get_files(args.input_dir)
 if len(files) == 0:
-    print "Not able to find any fastq files looked in %s" % (input_dir)
+    print "Not able to find any fastq files looked in %s" % (args.input_dir)
 else:
     # Fastq files have been found, lets try to prep for running workflows.
 
@@ -284,6 +282,7 @@ else:
     for data in upload_dataset_list:
         key, value = data.split(':')
         upload_list_mapping[key] = value
+
     try:
         workflow = workflowClient.show_workflow(workflow_id)
         workflow_input_keys = workflow['inputs'].keys()
@@ -299,7 +298,7 @@ else:
     # Files have been found.  Lets create a common history and use it to
     # upload all inputs and all data library input files.  A new history
     # will be created for each sample workflow run to store only results.
-    batchName = os.path.basename(input_dir)
+    batchName = os.path.basename(args.input_dir)
     upload_history = historyClient.create_history(batchName)
     upload_history['upload_history'] = True
     all_histories.append(upload_history)
