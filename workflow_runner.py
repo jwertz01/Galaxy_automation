@@ -85,10 +85,10 @@ def getNotes():
     notes.append("Original Input Directory: " + sample_dir)
     notes.append("Results Directory: " + result_dir)
     notes.append("Upload History Name: " + upload_history['name'])
-    notes.append("History Name: " + upload_history['name'])
+    notes.append("History Name: " + history['name'])
 
     notes.append(
-        "Workflow Name (id): " + workflow['name'] + " (" + oto_wf_id + ")")
+        "Workflow Name (id): " + workflow['name'] + " (" + workflow_id + ")")
     notes.append("Workflow Runtime Inputs >> ")
     for w in workflow_input_keys:
         dataset_name = ""
@@ -171,7 +171,7 @@ fastq_root = parser.get('Globals', 'fastq_dir')
 output_dir = parser.get('Globals', 'output_dir')
 genome = parser.get('Globals', 'genome')
 default_lib = parser.get('Globals', 'default_lib')
-oto_wf_id = parser.get('Globals', 'oto_wf_id')
+workflow_id = parser.get('Globals', 'workflow_id')
 
 
 galaxyInstance = GalaxyInstance(galaxy_host, key=api_key)
@@ -221,7 +221,7 @@ else:
         key, value = data.split(':')
         upload_list_mapping[key] = value
     try:
-        workflow = workflowClient.show_workflow(oto_wf_id)
+        workflow = workflowClient.show_workflow(workflow_id)
         workflow_input_keys = workflow['inputs'].keys()
     except ConnectionError:
         print "Error in retrieving Workflow Information from Galaxy.  Please verfiy the workflow id and Galaxy URL provided in the configuration file."
@@ -237,6 +237,7 @@ else:
     # will be created for each sample workflow run to store only results.
     batchName = os.path.basename(fastq_root)
     upload_history = historyClient.create_history(batchName)
+    upload_history['upload_history'] = True
     all_histories.append(upload_history)
     library_datasets = import_library_datasets(upload_history['id'])
 
@@ -263,6 +264,8 @@ else:
         print "\tR2 File: " + R2_file
 
         history = historyClient.create_history(sampleName)
+        history['upload_history'] = False
+    
         all_histories.append(history)
         result_histories.append(history)
         R1 = toolClient.upload_file(
@@ -285,6 +288,9 @@ else:
         workflow_notes = ",".join(notes)
         rep_params = {
             'SAMPLE_ID': sampleName, 'WORKFLOW_NOTES': workflow_notes}
+#   Keeping the following lines of code commented.  It might be in future versions of Galaxy this is how
+#   nested parameters need to be set.  See forum: https://github.com/afgane/bioblend/issues/71
+#   Until then, while running our hoemgrown patched Galaxy runtime, we will use the json mechanism to show nested parameters.
 #        params = {'toolshed.g2.bx.psu.edu/repos/devteam/bwa_wrappers/bwa_wrapper/1.2.3': {'params|readGroup|rgid': sampleName,
 #                                                                                          'params|readGroup|rglb': sampleName,
 #                                                                                          'params|readGroup|rgsm': sampleName},
@@ -293,7 +299,7 @@ else:
                                                                                                                    'rglb': sampleName,
                                                                                                                    'rgsm': sampleName}}},
                   'annotation_v2_wrapper': {'report_selector': {'input_notes': workflow_notes}}}
-        rwf = workflowClient.run_workflow(oto_wf_id,
+        rwf = workflowClient.run_workflow(workflow_id,
                                           data_map,
                                           params=params,
                                           history_id=history['id'],
