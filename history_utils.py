@@ -359,7 +359,7 @@ elif args.action == "download":
 
         histor_tar.close()
     print ""
-    print "The following Histories will NOT be downloaded since they are failed, or waiting, or running:
+    print "The following Histories will NOT be downloaded since they are failed, or waiting, or running:"
     print ""
     for h_info in all_failed:
         print "\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => %s" % (h_info.history['name'], h_info.status['state'])
@@ -409,16 +409,30 @@ elif args.action == "delete":
             print ""
             delete_upload_history = True
 
+    print "\tDeleting Completed (OK) Histories:"
+    print ""
     for h_info in all_successful:
-        print "\t\tDeleting Completed (OK) history, %s, in Galaxy." % h_info.history['name']
-        print ""
         historyClient.delete_dataset(h_info.history['id'])
+        print "\t\tHISTORY %s DELETED." % h_info.history['name']
+        print ""
 
     if args.delete_failed_histories:
+        print "\tDeleting FAILED Histories:"
+        print ""
         for h_info in all_failed:
             print "\t\tDeleting Failed history, %s, in Galaxy." % h_info.history['name']
             print ""
             historyClient.delete_dataset(h_info.history['id'])
+
+    print "\tIGNORING the following Histories because they are Running, Queued, or Can not be Reached for some reason:"
+    print ""
+    all_ignored = all_running + all_waiting
+    if not args.delete_failed_histories:
+        all_ignored += all_failed
+    for h_info in all_ignored:
+        print "\t\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => %s" % (h_info.history['name'], h_info.status['state'])
+    for h in all_except:
+        print "\t\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => Unknown" % (h['name'])
 
 
 sys.exit()
