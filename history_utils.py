@@ -88,7 +88,7 @@ arg_parser.add_argument('all_history_dir', help="directory which contains the Al
 arg_parser.add_argument('action', choices=['check_status', 'download', 'delete'], help="history helper utility to run")
 arg_parser.add_argument('-d', '--delete_post_download', action='store_true', help="delete histories after they are successfully downloaded")
 arg_parser.add_argument('-oo', '--overwrite_existing_downloads', action='store_true', help="remove existing history download files and re-download", default=False)
-arg_parser.add_argument('-o', '--output_dir', help="directory to download and extract history results into", default='$ALL_HISTORY_DIR/download')
+arg_parser.add_argument('-o', '--output_dir', help="directory to download and extract history results into. Default will be $ALL_HISTORY_DIR/results", default='$ALL_HISTORY_DIR/results')
 arg_parser.add_argument('-i', '--ini', help="configuration ini file to load", default='configuration.ini')
 arg_parser.add_argument('-f', '--delete_failed_histories', action='store_true', help="delete failed histories in addition to the completed (ok) histories")
 
@@ -280,7 +280,7 @@ if args.action == "check_status":
 elif args.action == "download":
     print "DOWNLOADING COMPLETED HISTORIES:"
     if args.output_dir.startswith('$'):
-        output_dir = os.path.join(args.all_history_dir, "download")
+        output_dir = os.path.join(args.all_history_dir, "results")
     else:
         output_dir = args.output_dir
 

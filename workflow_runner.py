@@ -179,7 +179,7 @@ arg_parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelp
 
                                         '''))
 arg_parser.add_argument('input_dir', help="directory which contains the workflow input files (subfolders will be traversed) that need to be uploaded.  IE, the files used to match to upload_input_ids (configuration.ini)")
-arg_parser.add_argument('-o', '--output_dir', help="directory to save logs into as well as history log file (All_Histories.json, used by the history_utils.py tool) Recommended to also be a directory you would like to download workflow results into.", default='$INPUT_DIR/results')
+arg_parser.add_argument('-o', '--output_dir', help="directory to save logs into as well as history log file (All_Histories.json, used by the history_utils.py tool) Recommended to also be a directory you would like to download workflow results into. Directory will be created if it does not exist. Default will be $INPUT_DIR/results", default='$INPUT_DIR/results')
 arg_parser.add_argument('-i', '--ini', help="configuration ini file to load", default='configuration.ini')
 
 args = arg_parser.parse_args()
@@ -216,6 +216,16 @@ elif args.ini.endswith('.ini'):
     config_parser.read(args.ini)
 else:
     print "The configuration ini file must end with .ini, the file specified was %s", (args.ini)
+
+if args.output_dir.startswith('$'):
+    output_dir = os.path.join(args.all_history_dir, "results")
+else:
+    output_dir = args.output_dir
+
+if not os.path.exists(output_dir):
+    print "Output directory %s not found. Creating ..." % (output_dir)
+    os.makedirs(output_dir)
+
 
 # Get the configuration parmaters
 api_key = get_api_key(config_parser.get('Globals', 'api_file'))
