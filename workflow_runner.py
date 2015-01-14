@@ -62,8 +62,8 @@ def setup_base_datamap(current_history, run_history, r1_id, r2_id):
             labels = ""
             for x in workflow_input_keys:
                 labels += "%s: ," % (workflow['inputs'][x]['label'],)
-            print "Workflow would like the following inputs please adjust your config.ini file %s" % (labels)
-            sys.exit(1)
+            print "Workflow would like the following inputs please adjust your configuration.ini file %s" % (labels)
+            raise RuntimeError("WorkflowConfiguration Problem - unknown requested input. Adjust and validate configuration.ini file.")
         dm[w] = {'id': data_set['id'], 'src': data_set['hda_ldda']}
     return dm
 
@@ -190,7 +190,7 @@ def main(args=None):
             print ""
             print "The configuration file, %s, does not exist. Create a configuration ini file and try again. Exiting." % (args.ini)
             print ""
-            sys.exit(4)
+            return 3
             
         config_parser.read('configuration.ini')
     elif args.ini.endswith('.ini'):
@@ -202,7 +202,7 @@ def main(args=None):
             print ""
             arg_parser.print_help()
             print ""
-            sys.exit(5)
+            return 4
         config_parser.read(args.ini)
     else:
         print "The configuration ini file must end with .ini, the file specified was %s", (args.ini)
@@ -281,10 +281,10 @@ def main(args=None):
             workflow_input_keys = workflow['inputs'].keys()
         except ConnectionError:
             print "Error in retrieving Workflow Information from Galaxy.  Please verfiy the workflow id and Galaxy URL provided in the configuration file."
-            sys.exit()
+            return 5
         except ValueError:
             print "Error in retrieving Workflow information from Galaxy.  Please verify your API Key is accurate."
-            sys.exit()
+            return 6
         assert len(workflow_input_keys) == len(
             upload_dataset_list) + len(library_dataset_list)
 
