@@ -191,9 +191,6 @@ if len(all_successful) > 0:
         print "\t\tHISTORY_NAME => " + h_info.history['name'] + " , PERCENT COMPLETED => " + str(h_info.status['percent_complete'])
 
 
-
-# print h['name'] + " => FINISHED.  ALL Steps completed SUCCESSFULLY."
-
 print ""
 print "All status has been retrieved. This command can be re-ran as needed."
 print ""
