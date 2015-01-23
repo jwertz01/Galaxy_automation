@@ -79,8 +79,6 @@ def _setup_base_datamap(workflow, library_list_mapping, library_datasets, upload
         # find mapping if present
         if workflow_label in library_list_mapping:
             if not workflow_label in UPLOAD_TYPE_GLOBALS:
-#                data_set = {dataset_client.show_dataset(
-#                    dataset_id=library_datasets[workflow_label]['id'])
                 data_set = {
                     'id': library_datasets[workflow_label]['id'], 'hda_ldda': library_datasets[workflow_label]['hda_ldda']}
         elif workflow_label in upload_dataset_map:
@@ -120,7 +118,7 @@ def _get_notes(history, workflow, library_list_mapping, library_datasets, upload
     notes.append("Original Input Directory: " + history['sample_dir'])
     notes.append("Results Directory: " + history['result_dir'])
     notes.append("Upload History Name: " + history['upload_history_name'])
-    notes.append("History Name: " + history['name'])
+    notes.append("Result History Name: " + history['name'])
 
     notes.append(
         "Workflow Name (id): " + workflow['name'] + " (" + workflow['id'] + ")")
@@ -240,59 +238,89 @@ def _get_files(root_path, file_match_re):
 
 def _post_wf_run(history, all_histories):
     logger = logging.getLogger(LOGGER_NAME)
-    logger.info(history)
+    logger.info("Workflow launch successful for sample: %s", history['sample_name'])
+    logger.info("\tDetails of the workflow invocation:")
+    notes = history['notes']
+    for note in notes:
+        logger.info("\t\t%s", note)
+
     all_histories.append(history)
 
 
 def _launch_workflow(history_client, workflow_client, tool_client, workflow, upload_history, upload_input_files_map, genome, library_list_mapping, library_datasets, sample_name, result_dir ):
 
-    sample_dir = os.path.basename(os.path.dirname(upload_input_files_map.values()[0]))
+    # Create a log file specific for this sample
+    sample_result_dir = os.path.join(result_dir, sample_name)
+    if not os.path.exists(sample_result_dir):
+        os.makedirs(sample_result_dir)
 
-    history = history_client.create_history(sample_name)
-    history['upload_history'] = False
-    history['sample_name'] = sample_name
-    history['sample_dir'] = sample_dir
-    history['upload_history_name'] = upload_history['name']
-    history['result_dir'] = result_dir
+    tab_formatter = '\t\t\t\t'
+    runlog_filename = os.path.join(sample_result_dir, sample_name+"_Workflow_Runner.log")
+    logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s',
+                    datefmt='%m-%d %H:%M',
+                    filename=runlog_filename,
+                    filemode='wb')
 
-    # upload all the files
-    upload_dataset_map = {}
-    for wf_inputname in upload_input_files_map.keys():
-        upload_file = upload_input_files_map[wf_inputname]
-        input_upload_out = tool_client.upload_file(
-            upload_file, upload_history['id'], file_type='fastqsanger', dbkey=genome)
-        input_dataset = input_upload_out['outputs'][0]
-        upload_dataset_map[wf_inputname] = input_dataset
+    local_logger = logging.getLogger("workflow_runner_"+sample_name)
 
-    data_map = _setup_base_datamap(
-        workflow, library_list_mapping, library_datasets, upload_dataset_map)
-    print data_map
 
-    # Have files in place need to set up workflow
-    # Based on example at
-    # http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
-    notes = _get_notes(history, workflow, library_list_mapping, library_datasets, upload_dataset_map, upload_input_files_map)
-    history['notes'] = notes
-    workflow_notes = ",".join(notes)
-    rep_params = {
-        'SAMPLE_ID': sample_name, 'WORKFLOW_NOTES': workflow_notes}
-#   Keeping the following lines of code commented.  It might be in future versions of Galaxy this is how
-#   nested parameters need to be set.  See forum: https://github.com/afgane/bioblend/issues/71
-#   Until then, while running our hoemgrown patched Galaxy runtime, we will use the json mechanism to show nested parameters.
-#        params = {'toolshed.g2.bx.psu.edu/repos/devteam/bwa_wrappers/bwa_wrapper/1.2.3': {'params|readGroup|rgid': sampleName,
-#                                                                                          'params|readGroup|rglb': sampleName,
-#                                                                                          'params|readGroup|rgsm': sampleName},
-#                  'annotation_v2_wrapper': {'input_notes': workflow_notes}}
-    params = {'toolshed.g2.bx.psu.edu/repos/devteam/bwa_wrappers/bwa_wrapper/1.2.3': {'params': {'readGroup': {'rgid': sample_name,
-                                                                                                               'rglb': sample_name,
-                                                                                                               'rgsm': sample_name}}},
-              'annotation_v2_wrapper': {'report_selector': {'input_notes': workflow_notes}}}
-    rwf = workflow_client.run_workflow(workflow['id'],
-                                      data_map,
-                                      params=params,
-                                      history_id=history['id'],
-                                      replacement_params=rep_params,
-                                      import_inputs_to_history=False)
+    try:
+        sample_dir = os.path.dirname(upload_input_files_map.values()[0])
+
+        local_logger.info("Launching workflow for sample: %s", sample_name)
+        history = history_client.create_history(sample_name)
+        history['upload_history'] = False
+        history['sample_name'] = sample_name
+        history['sample_dir'] = sample_dir
+        history['upload_history_name'] = upload_history['name']
+        history['result_dir'] = result_dir
+
+        # upload all the files
+        local_logger.info("Uploading input files for workflow: %s", workflow['name'])
+        upload_dataset_map = {}
+        for wf_inputname in upload_input_files_map.keys():
+            upload_file = upload_input_files_map[wf_inputname]
+            input_upload_out = tool_client.upload_file(
+                upload_file, upload_history['id'], file_type='fastqsanger', dbkey=genome)
+            local_logger.info("\tUploaded: %s => %s", wf_inputname, upload_file)
+            input_dataset = input_upload_out['outputs'][0]
+            upload_dataset_map[wf_inputname] = input_dataset
+
+        data_map = _setup_base_datamap(
+            workflow, library_list_mapping, library_datasets, upload_dataset_map)
+
+        # Have files in place need to set up workflow
+        # Based on example at
+        # http://bioblend.readthedocs.org/en/latest/api_docs/galaxy/docs.html#run-a-workflow
+        notes = _get_notes(history, workflow, library_list_mapping, library_datasets, upload_dataset_map, upload_input_files_map)
+        local_logger.info("Details of the workflow invocation:")
+        for note in notes:
+            local_logger.info("\t%s", note)
+        history['notes'] = notes
+        workflow_notes = ",".join(notes)
+        rep_params = {
+            'SAMPLE_ID': sample_name, 'WORKFLOW_NOTES': workflow_notes}
+    #   Keeping the following lines of code commented.  It might be in future versions of Galaxy this is how
+    #   nested parameters need to be set.  See forum: https://github.com/afgane/bioblend/issues/71
+    #   Until then, while running our hoemgrown patched Galaxy runtime, we will use the json mechanism to show nested parameters.
+    #        params = {'toolshed.g2.bx.psu.edu/repos/devteam/bwa_wrappers/bwa_wrapper/1.2.3': {'params|readGroup|rgid': sampleName,
+    #                                                                                          'params|readGroup|rglb': sampleName,
+    #                                                                                          'params|readGroup|rgsm': sampleName},
+    #                  'annotation_v2_wrapper': {'input_notes': workflow_notes}}
+        params = {'toolshed.g2.bx.psu.edu/repos/devteam/bwa_wrappers/bwa_wrapper/1.2.3': {'params': {'readGroup': {'rgid': sample_name,
+                                                                                                                   'rglb': sample_name,
+                                                                                                                   'rgsm': sample_name}}},
+                  'annotation_v2_wrapper': {'report_selector': {'input_notes': workflow_notes}}}
+        rwf = workflow_client.run_workflow(workflow['id'],
+                                          data_map,
+                                          params=params,
+                                          history_id=history['id'],
+                                          replacement_params=rep_params,
+                                          import_inputs_to_history=False)
+        local_logger.info("Workflow has been initiated, the resulting history object will be logged in All_Histories.json.")
+    finally:
+        logging.shutdown()
 
     return history
 
@@ -514,7 +542,7 @@ def main(argv=None):
             all_histories.append(upload_history)
             library_datasets = _import_library_datasets(history_client, upload_history, library_dataset_list, default_lib)
 
-            wf_results = []
+            wf_results = {}
 
             # Upload the files needed for the workflow
             for upload_wf_input_files_map in upload_wf_input_files_list:
@@ -526,29 +554,29 @@ def main(argv=None):
                     logger.info("\t%s => %s", wf_input_name, upload_wf_input_files_map[wf_input_name])
 
                 new_post_wf_run = partial(_post_wf_run, all_histories=all_histories)
-#def _launch_workflow(history_client, workflow_client, tool_client, workflow, upload_history, upload_input_files_map, library_list_mapping, library_datasets, sample_name, result_dir ):
-                result = pool.apply_async(_launch_workflow, args=[history_client,workflow_client,tool_client,workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir], callback=new_post_wf_run)
-                wf_results.append(result)
+                result = pool.apply_async(_launch_workflow, args=[history_client, workflow_client, tool_client, workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir], callback=new_post_wf_run)
+                wf_results[sample_name] = result
 
-            #should be all done with processing....
+            #should be all done with processing.... this will block until all work is done
             pool.close()
             pool.join()
 
-            print len(wf_results)
-            print result.get()
-            return 2
+            # lets check the sucessfullness of the runs
+            for sample in wf_results.keys():
+                sample_result = wf_results[sample]
+                if not sample_result.successful():
+                    logger.error("WORKFLOW INITIATION ERROR! SAMPLE = %s", sample)
+                    logger.error("\tError Message Returned: %s",sample_result.get())
 
             all_history_json.write(json.dumps(all_histories))
 
-
-
             logger.info("")
-            logger.info("Number of samples found: %s", str(len(files)))
-            logger.info("Workflow, %s, has been launched for all samples.", workflow_label)
+            logger.info("Number of samples found: %s", str(len(upload_wf_input_files_list)))
+            logger.info("Workflow, %s, has been launched for all samples.", workflow['name'])
             logger.info("You can view history status by invoking the following command:")
-            logger.info("%s>> python history_status.py <myConfiguration.ini>", tab_formatter)
+            logger.info("%s>> python history_status.py <my_result_dir> --ini <myConfiguration.ini>", tab_formatter)
             logger.info("")
-            logger.info("A log of all samples processed and their inputs can be found here: %s",str(run_log))
+            logger.info("A log of all samples processed and their inputs can be found here: %s", runlog_filename)
             logger.info("")
 
         return 0
