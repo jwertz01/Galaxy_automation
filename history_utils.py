@@ -141,7 +141,6 @@ else:
 # Get the configuration parmaters
 api_key = get_api_key(config_parser.get('Globals', 'api_file'))
 galaxy_host = config_parser.get('Globals', 'galaxy_host')
-output_dir = config_parser.get('Globals', 'output_dir')
 delete_histories = config_parser.get('Globals', 'delete_post_download')
 
 # Get a connection to Galaxy and a client to interact with Histories

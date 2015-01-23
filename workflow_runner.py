@@ -134,7 +134,7 @@ def _get_notes(history, workflow, library_list_mapping, library_datasets, upload
                 dataset_id = library_datasets[workflow_label]['id']
                 dataset_lib = library_datasets[workflow_label]['library_name']
                 notes.append(
-                    wf_input + ": " + dataset_lib + os.path.sep + dataset_name + " (" + dataset_id + ")")
+                    workflow_label + "("+wf_input + ") => " + dataset_lib + os.path.sep + dataset_name + " (" + dataset_id + ")")
         elif workflow_label in upload_dataset_map:
             # This would need to be augmented if there are other types of
             # uploads needed
@@ -143,7 +143,7 @@ def _get_notes(history, workflow, library_list_mapping, library_datasets, upload
             dataset_name = dataset['name']
             dataset_id = dataset['id']
             notes.append(
-                wf_input + ": " + dataset_name + " (" + dataset_id + ") " + dataset_file)
+                workflow_label + "("+wf_input + ") => " + dataset_name + " (" + dataset_id + ") " + dataset_file)
     return notes
 
 
