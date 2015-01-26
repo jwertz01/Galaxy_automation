@@ -26,7 +26,10 @@ import logging
 import collections
 
 class MaxLevelFilter(logging.Filter):
-    '''Filters (lets through) all messages with level <= LEVEL'''
+    '''
+    Logging Filter for seperating messages between stdout and stderr
+    Filters (lets through) all messages with level <= LEVEL
+    '''
     def __init__(self, level):
         self.level = level
 
@@ -34,12 +37,17 @@ class MaxLevelFilter(logging.Filter):
         return record.levelno <= self.level 
 
 def _get_api_key(file_name):
+    '''
+    Reads the api key from file and returns 
+
+    '''
     fh = open(file_name)
     api = fh.readline().strip('\n')
     return api
 
 
 def _parse_sample_name(file_path, file_name_re):
+
     sample_name = file_name_re.match(os.path.basename(file_path))
     if sample_name is not None:
         return sample_name.group(1)
@@ -88,7 +96,7 @@ def _setup_base_datamap(workflow, library_list_mapping, library_datasets, upload
             labels = ""
             for wf_input in workflow['inputs'].keys():
                 labels += "%s, " % (workflow['inputs'][wf_input]['label'],)
-            raise RuntimeError("Workflow requesting '%s' unsure what to assign. Choices I have: %s. Workflow would like the following inputs please adjust your configuration.ini file: (%s). WorkflowConfiguration Problem - unknown requested input. Adjust and validate configuration.ini file.", workflow_label, ",".join(library_list_mapping.keys().join(upload_list_mapping)), labels)
+            raise RuntimeError("Workflow requesting \'%s\' unsure what to assign. Choices I have: %s. Workflow would like the following inputs please adjust your configuration.ini file: (%s). WorkflowConfiguration Problem - unknown requested input. Adjust and validate configuration.ini file.", workflow_label, ",".join(library_list_mapping.keys().join(upload_list_mapping)), labels)
         datamap[w_input] = {'id': data_set['id'], 'src': data_set['hda_ldda']}
     return datamap
 
