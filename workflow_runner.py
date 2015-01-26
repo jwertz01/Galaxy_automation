@@ -18,7 +18,6 @@ import os
 import fnmatch
 import os.path
 import re
-import time
 import json
 import argparse
 import textwrap
@@ -40,13 +39,30 @@ def _get_api_key(file_name):
     '''
     Reads the api key from file and returns 
 
+    :type file_path: string
+    :param file_path: the qualified path name of the file containing the api key
+
+    :return string: the user api key string to use when connecting to galaxy instance
+
     '''
-    fh = open(file_name)
-    api = fh.readline().strip('\n')
+    file_handle = open(file_name)
+    api = file_handle.readline().strip('\n')
     return api
 
 
 def _parse_sample_name(file_path, file_name_re):
+    '''
+    Strips a sample name out of a file name
+
+    :type file_path: string
+    :param file_path: the full file name to strip sample name out of
+
+    :type file_name_re: re Regular Expression Object (compiled via re.compile() from a regular expression pattern)
+    :param file_name_re: The regular expression object used to pull out the sample name from the first group found.
+
+    :return string: return the sample name or 'Unable_to_parse' if it is unable to retrieve a sample name from the file
+
+    '''
 
     sample_name = file_name_re.match(os.path.basename(file_path))
     if sample_name is not None:
@@ -57,28 +73,22 @@ def _parse_sample_name(file_path, file_name_re):
 
 def _setup_base_datamap(workflow, library_list_mapping, library_datasets, upload_dataset_map):
     '''
-        Creates the data map that the bioblend WorkflowClient needs to invoke the workflow_label
+    Creates the data map that the bioblend WorkflowClient needs to invoke the workflow_label
 
-        :type workflow: returned JSON object from WorkflowClient.show_workflow
-        :param workflow: a description of the workflow and its iputs as a JSON object
+    :type workflow: returned JSON object from WorkflowClient.show_workflow
+    :param workflow: a description of the workflow and its iputs as a JSON object
 
-        :type library_list_mapping: dict 
-        :param library_list_mapping: a map of workflow input names to galaxy library dataset ids 
+    :type library_list_mapping: dict 
+    :param library_list_mapping: a map of workflow input names to galaxy library dataset ids 
 
-        :type library_datasets: list 
-        :param library_datasets: a list of the library datasets that were imported into the upload history
+    :type library_datasets: list of Galaxy DataSet JSON objects 
+    :param library_datasets: a list of the library datasets that were imported into the upload history
 
-        :type upload_list_mapping: dict 
-        :param upload_list_mapping: a map of workflow input names to files/datasets that should have been uploaded from local filesystem
+    :type upload_dataset_map: dict of String:Galaxy DataSet JSON objects
+    :param upload_dataset_map: a map/dict of workflow input names to files/datasets that should have been uploaded from local filesystem
 
-        :type r1_id: str 
-        :param r1_id: the galaxy dataset id of the READ1 local file that was uploaded to the upload history
-
-        :type r2_id: str
-        :param r2_id: the galaxy dataset id of the READ2 local file that was uploaded to the upload history
-
-        :return: a dataset map depicting the mapping of workflow inputs to galaxy dataset ids, formatted as needed by 
-                 bioblend WorkflowClient run_workflow
+    :return: a dataset map depicting the mapping of workflow inputs to galaxy dataset ids, formatted as needed by 
+             bioblend WorkflowClient run_workflow
     '''
     datamap = {}
     for w_input in workflow['inputs'].keys():
@@ -96,12 +106,35 @@ def _setup_base_datamap(workflow, library_list_mapping, library_datasets, upload
             labels = ""
             for wf_input in workflow['inputs'].keys():
                 labels += "%s, " % (workflow['inputs'][wf_input]['label'],)
-            raise RuntimeError("Workflow requesting \'%s\' unsure what to assign. Choices I have: %s. Workflow would like the following inputs please adjust your configuration.ini file: (%s). WorkflowConfiguration Problem - unknown requested input. Adjust and validate configuration.ini file.", workflow_label, ",".join(library_list_mapping.keys().join(upload_list_mapping)), labels)
+            raise RuntimeError("Workflow requesting \'%s\' unsure what to assign. Choices I have: %s. Workflow would like the following inputs please adjust your configuration.ini file: (%s). WorkflowConfiguration Problem - unknown requested input. Adjust and validate configuration.ini file.", workflow_label, ",".join(library_list_mapping.keys().join(upload_dataset_map.keys())), labels)
         datamap[w_input] = {'id': data_set['id'], 'src': data_set['hda_ldda']}
     return datamap
 
 
 def _import_library_datasets(history_client, upload_history, library_dataset_list, default_lib):
+    '''
+    Import a set of datasets from a Galaxy shared library into a specified Galaxy history
+
+    :type history_client: bioblend.HistoryClient
+    :param history_client: the Galaxy history client object to use for taking operations on Galaxy histories remotely
+
+    :type upload_history: the Galaxy history to import the library datasets into
+    :param upload_history: Galaxy JSON history object - expected to have an 'id' attribute
+
+    :type library_dataset_list: list
+    :param library_dataset_list: a list of of <workflow_input_name>:<library_dataset_galaxy_id> tuples 
+        read from the configuration ini.  The library dataset galaxy ids are used to identify, and locate the 
+        library dataset files to import into the upload_history
+
+    :type default_lib: string
+    :param default_lib: the default Galaxy Shared Data library as configured in the config.ini.  This is
+        only used for outputting log messages.  It is assumed the library dataset ids specfied are located in
+        this Galaxy shared library.
+
+    :return dict: a map of workflow intput names (key) to galaxy DataSet JSON objects (value) returned from
+        the Galaxy HistoryClient from the dataset import to the history from the library.
+
+    '''
     library_datasets = {}
     for data in library_dataset_list:
         key, value = data.split(':')
@@ -121,6 +154,32 @@ def _import_library_datasets(history_client, upload_history, library_dataset_lis
 
 
 def _get_notes(history, workflow, library_list_mapping, library_datasets, upload_dataset_map, upload_input_files_map):
+    '''
+    Builds up a set of audit log messages about the automated workflow run for this specific sample.
+    The notes are used in the logging of workflow automation run logs as well as what gets passed into 
+    the workflow if RUN_SUMMARY is specified in the configuration.ini file
+
+    :type history: bioblend Galaxy History JSON object returned from HistoryClient during history creation
+    :param history: Galaxy history JSON object (generated and returned during history creation through HistoryClient)
+
+    :type workflow: bioblend Galaxy Workflow JSON object
+    :param workflow: Galaxy worfklow JSON object (genearted and returned during WorkflowClient.show_workflow)
+
+    :type library_list_mapping: dict of String to Galaxy DataSet JSON objects
+    :param library_list_mapping: a map of workflow input names to galaxy library dataset JSON objects returned during HistoryClient upload
+
+    :type library_datasets: list of Galaxy DataSet JSON objects 
+    :param library_datasets: a list of the library datasets that were imported into the upload history
+
+    :type upload_dataset_map: dict of String:Galaxy DataSet JSON objects
+    :param upload_dataset_map: a map/dict of workflow input names to files/datasets that should have been uploaded from local filesystem
+
+    :type upload_input_files_map: dict of String:FilePaths
+    :param upload_input_files_map: a map/dict of workflow input names to file paths of locally uploaded workflow inputs from files
+
+    :return list of strings.  Each item in the notes is a different audit message about the workflow run.
+
+    '''
     # return a string that describes this particular setup
     notes = []
     notes.append("Original Input Directory: " + history['sample_dir'])
@@ -154,11 +213,6 @@ def _get_notes(history, workflow, library_list_mapping, library_datasets, upload
                 workflow_label + "("+wf_input + ") => " + dataset_name + " (" + dataset_id + ") " + dataset_file)
     return notes
 
-
-def _changePath(old_path):
-    # get where to write and root
-    new_path = old_path.replace(args.input_dir, output_dir)
-    return new_path
 
 def _upload_input_files(upload_wf_input_files_map, history_client, tool_client):
     upload_dataset_map = {}
@@ -256,6 +310,11 @@ def _post_wf_run(history, all_histories):
 
 
 def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_input_files_map, genome, library_list_mapping, library_datasets, sample_name, result_dir ):
+    '''
+    Launches a workflow in Galaxy.  Assumed that this function is thread safe - can be run leveraging multiprocessing python logic asyncronously.
+
+
+    '''
 
     # Create a log file specific for this sample
     sample_result_dir = os.path.join(result_dir, sample_name)
@@ -485,9 +544,6 @@ def main(argv=None):
         api_key = _get_api_key(config_parser.get('Globals', 'api_file'))
         galaxy_host = config_parser.get('Globals', 'galaxy_host')
         file_name_re = re.compile(config_parser.get('Globals', 'sample_re'))
-        read1_re = config_parser.get('Globals', 'READ1_re')
-        read1_sub_re = config_parser.get('Globals', 'READ1_sub_re')
-        read2_sub_re = config_parser.get('Globals', 'READ2_sub_re')
         library_input_ids = ''.join(ch for ch in config_parser.get('Globals', 'library_input_ids') if ch != '\n')
         library_dataset_list = library_input_ids.split(',')
         upload_input_ids = ''.join(ch for ch in config_parser.get('Globals', 'upload_input_ids') if ch != '\n')
@@ -501,9 +557,7 @@ def main(argv=None):
 
         galaxy_instance = GalaxyInstance(galaxy_host, key=api_key)
         history_client = HistoryClient(galaxy_instance)
-        tool_client = ToolClient(galaxy_instance)
         workflow_client = WorkflowClient(galaxy_instance)
-        dataSet_client = DatasetClient(galaxy_instance)
 
         # Start to officially log into the results directory
         logger.info("")
