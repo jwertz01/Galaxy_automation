@@ -247,12 +247,16 @@ def _post_wf_run(history, all_histories):
     all_histories.append(history)
 
 
-def _launch_workflow(history_client, workflow_client, tool_client, workflow, upload_history, upload_input_files_map, genome, library_list_mapping, library_datasets, sample_name, result_dir ):
+def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_input_files_map, genome, library_list_mapping, library_datasets, sample_name, result_dir ):
 
     # Create a log file specific for this sample
     sample_result_dir = os.path.join(result_dir, sample_name)
     if not os.path.exists(sample_result_dir):
         os.makedirs(sample_result_dir)
+
+    # Clean up any existing file handlers (this is due to multi-processor threads)
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
 
     tab_formatter = '\t\t\t\t'
     runlog_filename = os.path.join(sample_result_dir, sample_name+"_Workflow_Runner.log")
@@ -266,6 +270,11 @@ def _launch_workflow(history_client, workflow_client, tool_client, workflow, upl
 
 
     try:
+        galaxy_instance = GalaxyInstance(galaxy_host, key=api_key)
+        history_client = HistoryClient(galaxy_instance)
+        tool_client = ToolClient(galaxy_instance)
+        workflow_client = WorkflowClient(galaxy_instance)
+
         sample_dir = os.path.dirname(upload_input_files_map.values()[0])
 
         local_logger.info("Launching workflow for sample: %s", sample_name)
@@ -319,6 +328,10 @@ def _launch_workflow(history_client, workflow_client, tool_client, workflow, upl
                                           replacement_params=rep_params,
                                           import_inputs_to_history=False)
         local_logger.info("Workflow has been initiated, the resulting history object will be logged in All_Histories.json.")
+    except Exception as inst:
+        local_logger.error("Unexpected Error occurred: %s : %s : %s", inst.__class__.__name__, inst.args, inst.message)
+        local_logger.exception(inst)
+        raise inst
     finally:
         logging.shutdown()
 
@@ -554,7 +567,7 @@ def main(argv=None):
                     logger.info("\t%s => %s", wf_input_name, upload_wf_input_files_map[wf_input_name])
 
                 new_post_wf_run = partial(_post_wf_run, all_histories=all_histories)
-                result = pool.apply_async(_launch_workflow, args=[history_client, workflow_client, tool_client, workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir], callback=new_post_wf_run)
+                result = pool.apply_async(_launch_workflow, args=[galaxy_host, api_key, workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir], callback=new_post_wf_run)
                 wf_results[sample_name] = result
 
             #should be all done with processing.... this will block until all work is done
@@ -566,7 +579,11 @@ def main(argv=None):
                 sample_result = wf_results[sample]
                 if not sample_result.successful():
                     logger.error("WORKFLOW INITIATION ERROR! SAMPLE = %s", sample)
-                    logger.error("\tError Message Returned: %s",sample_result.get())
+                    try:
+                        sample_result.get()
+                    except Exception as inst:
+                        logger.error("Unexpected Error occurred: %s , %s ", type(inst), inst)
+                        logger.exception(inst)
 
             all_history_json.write(json.dumps(all_histories))
 
@@ -582,7 +599,7 @@ def main(argv=None):
         return 0
 
     except Exception as inst:
-        logger.error("Unexpected Error occurred: %s", inst.message)
+        logger.error("Unexpected Error occurred: %s : %s", type(inst), inst.message)
         logger.exception(inst)
         return 23
     finally:
