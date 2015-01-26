@@ -332,7 +332,7 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
         local_logger.error("Unexpected Error occurred: %s : %s : %s", inst.__class__.__name__, inst.args, inst.message)
         local_logger.exception(inst)
         # Wrappering exception to make sure the exception is pickable.  HTTPError would cause UnpickleableErrors and hang process workers during pool join
-        raise RuntimeError("Error occurred with processing Sample, %s, of type %s.  Review sample log file for more information: %s", sample_name, type(inst), runlog_filename)
+        raise RuntimeError("Error (type: %s) occurred when processing Sample, %s.  Review sample log file for more information: %s", type(inst), sample_name, runlog_filename)
     finally:
         logging.shutdown()
 
