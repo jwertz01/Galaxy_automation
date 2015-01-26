@@ -331,7 +331,7 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
     except Exception as inst:
         local_logger.error("Unexpected Error occurred: %s : %s : %s", inst.__class__.__name__, inst.args, inst.message)
         local_logger.exception(inst)
-        raise inst
+        raise RuntimeError("Error occurred with processing Sample, %s, of type %s.  Review sample log file for more information: %s", sample_name, type(inst), runlog_filename)
     finally:
         logging.shutdown()
 
