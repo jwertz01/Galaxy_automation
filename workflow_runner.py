@@ -7,7 +7,6 @@ from bioblend.galaxy import GalaxyInstance
 from bioblend.galaxy.histories import HistoryClient
 from bioblend.galaxy.tools import ToolClient
 from bioblend.galaxy.workflows import WorkflowClient
-from bioblend.galaxy.datasets import DatasetClient
 from bioblend.galaxy.client import ConnectionError
 from requests.packages import urllib3
 from ConfigParser import SafeConfigParser
@@ -49,7 +48,6 @@ def _get_api_key(file_name):
     api = file_handle.readline().strip('\n')
     return api
 
-
 def _parse_sample_name(file_path, file_name_re):
     '''
     Strips a sample name out of a file name
@@ -69,7 +67,6 @@ def _parse_sample_name(file_path, file_name_re):
         return sample_name.group(1)
     else:
         return 'Unable_to_parse'
-
 
 def _setup_base_datamap(workflow, library_list_mapping, library_datasets, upload_dataset_map):
     '''
@@ -109,7 +106,6 @@ def _setup_base_datamap(workflow, library_list_mapping, library_datasets, upload
             raise RuntimeError("Workflow requesting \'%s\' unsure what to assign. Choices I have: %s. Workflow would like the following inputs please adjust your configuration.ini file: (%s). WorkflowConfiguration Problem - unknown requested input. Adjust and validate configuration.ini file.", workflow_label, ",".join(library_list_mapping.keys().join(upload_dataset_map.keys())), labels)
         datamap[w_input] = {'id': data_set['id'], 'src': data_set['hda_ldda']}
     return datamap
-
 
 def _import_library_datasets(history_client, upload_history, library_dataset_list, default_lib):
     '''
@@ -151,7 +147,6 @@ def _import_library_datasets(history_client, upload_history, library_dataset_lis
             raise RuntimeError("Unable to mark the imported library dataset as un-deleted. Galaxy communication error?")
         library_datasets[key] = library_file_dataset
     return library_datasets
-
 
 def _get_notes(history, workflow, library_list_mapping, library_datasets, upload_dataset_map, upload_input_files_map):
     '''
@@ -213,12 +208,6 @@ def _get_notes(history, workflow, library_list_mapping, library_datasets, upload
                 workflow_label + "("+wf_input + ") => " + dataset_name + " (" + dataset_id + ") " + dataset_file)
     return notes
 
-
-def _upload_input_files(upload_wf_input_files_map, history_client, tool_client):
-    upload_dataset_map = {}
-
-    return upload_dataset_map
-
 def _get_all_upload_files(root_path, upload_list_mapping, config_parser):
     '''
     Locates all the files that should be uploaded and groups them together according to workflow inputs.
@@ -274,10 +263,20 @@ def _get_all_upload_files(root_path, upload_list_mapping, config_parser):
     return upload_file_tuple_list
 
 def _get_r2_file(r1_file, config_parser):
+    '''
+    Given the forward read fastq file name, compute what the reverse read fastq file name should be.
+
+    :type: r1_file: String - qualified file name
+    :param r1_file: The fully qualified forward read file name to use to base the reverse read file name from
+
+    :type: config_parser: SafeConfigParser
+    :param config_parser: The configuration parser for loading configuration from the ini file
+
+    :return String - fully qualified file name for the reverse read file
+    '''
     read1_sub_re = config_parser.get('Globals', 'READ1_sub_re')
     read2_sub_re = config_parser.get('Globals', 'READ2_sub_re')
 
-    input_dir_path = os.path.dirname(r1_file) + os.path.sep
     r1_sub_pattern = re.compile(read1_sub_re, re.IGNORECASE)
     r2_file = r1_sub_pattern.sub(read2_sub_re, r1_file)
     if not os.path.exists(r1_file):
@@ -288,6 +287,19 @@ def _get_r2_file(r1_file, config_parser):
     return r2_file
 
 def _get_files(root_path, file_match_re):
+    '''
+    Traverse all files under the root directory (including sub-directories) and build a list
+    of files whose name match the specified compiled regular expression
+
+    :type: root_path: str
+    :param root_path: The root input directory as specified as a main argument
+
+    :type file_match_re: re Regular Expression Object (compiled via re.compile() from a regular expression pattern)
+    :param file_match_re: The regular expression object used to match filenames to find.
+
+    :return list of file names that match the regular expression under the root directory
+
+    '''
     # Eventually might want to get more than just fastq files to upload.
     # This would require some type of alignment by sample id, or in a common directory,
     # or being passed in a fully qualified file name or someting else.
@@ -299,6 +311,12 @@ def _get_files(root_path, file_match_re):
     return matches
 
 def _post_wf_run(history, all_histories):
+    '''
+    This is a callback method which gets invoked when _launch_workflow completes successfully.
+    It will log information into the global workflow_run log file and also add the resulting 
+    history JSON object to the all_histories list for serialization to All_Histories.json file.
+
+    '''
     logger = logging.getLogger(LOGGER_NAME)
     logger.info("Workflow launch successful for sample: %s", history['sample_name'])
     logger.info("\tDetails of the workflow invocation:")
@@ -308,11 +326,57 @@ def _post_wf_run(history, all_histories):
 
     all_histories.append(history)
 
-
 def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_input_files_map, genome, library_list_mapping, library_datasets, sample_name, result_dir ):
     '''
     Launches a workflow in Galaxy.  Assumed that this function is thread safe - can be run leveraging multiprocessing python logic asyncronously.
 
+    :type: galaxy_host: string
+    :param galaxy_host: The connection URL/address to the galaxy server as configured in the configuration.ini file 
+
+    :type: api_key: string
+    :param api_key: user Galaxy api string for user authentication in Galaxy communication
+
+    :type workflow: bioblend Galaxy Workflow JSON object
+    :param workflow: Galaxy worfklow JSON object (genearted and returned during WorkflowClient.show_workflow)
+
+    :type: upload_history: bioblend Galaxy History JSON object 
+    :param upload_history: Galaxy history JSON object (generated and returned during HistoryClient.create_history)
+
+    :type upload_input_files_map: dict of String:FilePaths
+    :param upload_input_files_map: a map/dict of workflow input names to file paths of locally uploaded workflow inputs from files
+
+    :type: genome: string
+    :param genome: the dbkey (genome) the input files are associated with and will be set when the files are uploaded through the ToolClient
+
+    :type library_list_mapping: dict of String to Galaxy DataSet JSON objects
+    :param library_list_mapping: a map of workflow input names to galaxy library dataset JSON objects returned during HistoryClient upload
+
+    :type library_datasets: list of Galaxy DataSet JSON objects 
+    :param library_datasets: a list of the library datasets that were imported into the upload history
+
+    :type: sample_name: string
+    :param sample_name: The sample name 
+
+    :type: result_dir: string
+    :param result_dir: The directory to place results into (log files and serialized JSON history objects)
+
+    :return bioblend History JSON object which will hold all the workflow results for the history.
+            The history JSON object will also be augmented with the following additional data:
+
+            key: upload_history
+            value: whether or not this was an upload history (vs. a results history)
+
+            key: sample_name
+            value: the name of the sample ran
+
+            key: sample_dir
+            value: the directory name/path where the sample input files were locally found and uploaded from
+
+            key: upload_history_name 
+            value: the name of the history containing the uploaded files for this workflow run
+
+            key: result_dir
+            value: the directory which contains the results (logs, json) for this workflow run
 
     '''
 
