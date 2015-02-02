@@ -23,6 +23,16 @@ class HistoryInfo():
         self.history = hist
         self.status = hist_status
 
+def _str2bool(val):
+    '''
+    Helper function to change configuration parms in config.ini into Boolean
+
+    type: val: string
+    param val: The value to convert into Boolean
+
+    return Boolean interpretation of val
+    '''
+    return str(val).lower() in ("yes", "true")
 
 def get_api_key(file_name):
     fh = open(file_name)
@@ -142,6 +152,7 @@ else:
 api_key = get_api_key(config_parser.get('Globals', 'api_file'))
 galaxy_host = config_parser.get('Globals', 'galaxy_host')
 delete_histories = config_parser.get('Globals', 'delete_post_download')
+purge_histories = config_parser.get('Globals', 'purge')
 
 # Get a connection to Galaxy and a client to interact with Histories
 galaxyInstance = GalaxyInstance(galaxy_host, key=api_key)
@@ -354,7 +365,7 @@ elif args.action == "download":
         if args.delete_post_download and download_success:
             print "\t\tDeleting history, %s, in Galaxy." % h_info.history['name']
             print ""
-            historyClient.delete_dataset(h_info.history['id'])
+            historyClient.delete_history(h_info.history['id'])
 
         histor_tar.close()
     print ""
@@ -411,7 +422,7 @@ elif args.action == "delete":
     print "\tDeleting Completed (OK) Histories:"
     print ""
     for h_info in all_successful:
-        historyClient.delete_dataset(h_info.history['id'])
+        historyClient.delete_history(h_info.history['id'])
         print "\t\tHISTORY %s DELETED." % h_info.history['name']
         print ""
 
@@ -421,7 +432,7 @@ elif args.action == "delete":
         for h_info in all_failed:
             print "\t\tDeleting Failed history, %s, in Galaxy." % h_info.history['name']
             print ""
-            historyClient.delete_dataset(h_info.history['id'])
+            historyClient.delete_history(h_info.history['id'])
 
     print "\tIGNORING the following Histories because they are Running, Queued, or Can not be Reached for some reason:"
     print ""
