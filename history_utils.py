@@ -73,57 +73,58 @@ def _has_failures(history):
     return has_failures
 
 def _delete(history_client, num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful, delete_failed_histories, purge_histories):
-        logger.info("DELETING HISTORIES...")
-        if len(all_successful) == 0:
-            if delete_failed_histories:
-                if len(all_failed) == 0:
-                    logger.warning("\tNo completed or failed Histories to delete - Nothing to do.  Run again later, or use the check_status option to view analysis progress. Exiting.")
-                    return 5
-            else:
-                logger.warning("\tNo completed Histories to delete - Nothing to do.  Run again later, or use the check_status option to view analysis progress. Exiting.")
-                return 6
+    logger = logging.getLogger(LOGGER_NAME)
 
-        delete_upload_history = False
+    logger.info("DELETING HISTORIES...")
+    if len(all_successful) == 0:
         if delete_failed_histories:
-            if num_histories != (len(all_successful) + len(all_failed) + 1):
-                logger.warning("\tWill ignor histories that are in progress, or can not determine status from.")
-                logger.warning("\tWill ignor Upload history, %s, since there are still running analyses.", upload_history.history['name'])
-            else:
-                delete_upload_history = True
+            if len(all_failed) == 0:
+                logger.warning("\tNo completed or failed Histories to delete - Nothing to do.  Run again later, or use the check_status option to view analysis progress. Exiting.")
+                return 5
         else:
-            if num_histories != (len(all_successful) + 1):
-                logger.warning("\tNot all histories have completed successfully.  Will only delete successfully completed analysis histories. Upload History, %s, will not be deleted until all histories are completed.", upload_history.history['name'])
-                logger.info("Deleting %s SUCCESSFULLY Completed Histories of %s total Histories", len(all_successful), num_histories)
-            else:
-                logger.info("Deleting %s Completed Histories AND the Upload History, %s", len(all_successful), upload_history.history['name'])
-                delete_upload_history = True
+            logger.warning("\tNo completed Histories to delete - Nothing to do.  Run again later, or use the check_status option to view analysis progress. Exiting.")
+            return 6
 
-        if (len(all_successful) > 0):
-            logger.info("\tDeleting Completed (SUCCESSFULLY - OK) Histories:")
-            for h_info in all_successful:
-                history_client.delete_history(h_info.history['id'], purge_histories)
-                logger.info("\t\tHISTORY %s DELETED. Purged? %s", h_info.history['name'], purge_histories)
-
-        if (delete_failed_histories and (len(all_failed) > 0)):
-            logger.info("\tDeleting FAILED Histories:")
-            for h_info in all_failed:
-                history_client.delete_history(h_info.history['id'])
-                logger.info("\t\tHISTORY %s DELETED. Purged? %s", h_info.history['name'], purge_histories)
-
-        if delete_upload_history is True:
-            logger.info("\tAll Result Histories Deleted, Deleting Upload History: %s", upload_history.history['name'])
-            history_client.delete_history(upload_history.history['id'])
-            logger.info("\t\tHISTORY %s DELETED. Purged? %s", upload_history.history['name'], purge_histories)
+    delete_upload_history = False
+    if delete_failed_histories:
+        if num_histories != (len(all_successful) + len(all_failed) + 1):
+            logger.warning("\tWill ignor histories that are in progress, or can not determine status from.")
+            logger.warning("\tWill ignor Upload history, %s, since there are still running analyses.", upload_history.history['name'])
         else:
-            logger.warning("\tIGNORING the following Histories because they are Running, Queued, or Can not be Reached for some reason:")
-            all_ignored = all_running + all_waiting
-            if not delete_failed_histories:
-                all_ignored += all_failed
-            for h_info in all_ignored:
-                logger.warning("\t\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => %s", h_info.history['name'], h_info.status['state'])
-            for h in all_except:
-                logger.warning("\t\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => Unknown", h['name'])
+            delete_upload_history = True
+    else:
+        if num_histories != (len(all_successful) + 1):
+            logger.warning("\tNot all histories have completed successfully.  Will only delete successfully completed analysis histories. Upload History, %s, will not be deleted until all histories are completed.", upload_history.history['name'])
+            logger.info("Deleting %s SUCCESSFULLY Completed Histories of %s total Histories", len(all_successful), num_histories)
+        else:
+            logger.info("Deleting %s Completed Histories AND the Upload History, %s", len(all_successful), upload_history.history['name'])
+            delete_upload_history = True
 
+    if (len(all_successful) > 0):
+        logger.info("\tDeleting Completed (SUCCESSFULLY - OK) Histories:")
+        for h_info in all_successful:
+            history_client.delete_history(h_info.history['id'], purge_histories)
+            logger.info("\t\tHISTORY %s DELETED. Purged? %s", h_info.history['name'], purge_histories)
+
+    if (delete_failed_histories and (len(all_failed) > 0)):
+        logger.info("\tDeleting FAILED Histories:")
+        for h_info in all_failed:
+            history_client.delete_history(h_info.history['id'])
+            logger.info("\t\tHISTORY %s DELETED. Purged? %s", h_info.history['name'], purge_histories)
+
+    if delete_upload_history is True:
+        logger.info("\tAll Result Histories Deleted, Deleting Upload History: %s", upload_history.history['name'])
+        history_client.delete_history(upload_history.history['id'])
+        logger.info("\t\tHISTORY %s DELETED. Purged? %s", upload_history.history['name'], purge_histories)
+    else:
+        logger.warning("\tIGNORING the following Histories because they are Running, Queued, or Can not be Reached for some reason:")
+        all_ignored = all_running + all_waiting
+        if not delete_failed_histories:
+            all_ignored += all_failed
+        for h_info in all_ignored:
+            logger.warning("\t\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => %s", h_info.history['name'], h_info.status['state'])
+        for h in all_except:
+            logger.warning("\t\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => Unknown", h['name'])
 
 def _post_dl_callback(h_info):
    logger = logging.getLogger(LOGGER_NAME)
@@ -195,7 +196,6 @@ def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrit
         raise RuntimeError("Error (type: %s) occurred when processing Sample, %s.  Review sample log file for more information: %s", type(inst), sample_name, runlog_filename)
 
     return h_info
-
 
 def _report_status(num_histories, all_except, all_failed, all_waiting, all_running, all_successful):
     '''
@@ -519,9 +519,8 @@ def main(argv=None):
     elif args.action == "download":
 
         num_processes = config_parser.get('Globals', 'num_processes')
-        force_overwrite = config
 
-        _download(galaxy_host, api_key, num_processes, output_dir, use_sample_result_dir, num_histories, all_except, all_failed, all_waiting, all_running, all_successful, overwrite, args.overwrite_existing_downloads, delete_histories, purge_histories)
+        _download(galaxy_host, api_key, num_processes, output_dir, use_sample_result_dir, num_histories, all_except, all_failed, all_waiting, all_running, all_successful, args.overwrite_existing_downloads, delete_histories, purge_histories)
 
      
     elif args.action == "delete":
