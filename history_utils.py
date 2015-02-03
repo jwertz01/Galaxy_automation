@@ -5,6 +5,7 @@ from bioblend.galaxy import GalaxyInstance
 from bioblend.galaxy.histories import HistoryClient
 from bioblend.galaxy.client import ConnectionError
 from ConfigParser import SafeConfigParser
+from ConfigParser import NoOptionError
 from requests.packages import urllib3
 import sys
 import os
@@ -51,13 +52,11 @@ def _get_api_key(file_name):
     api = fh.readline().strip('\n')
     return api
 
-
 def _get_total_datasets(history_status):
     total_datasets = 0
     if history_status is not None:
         total_datasets = sum(history_status['state_details'].itervalues())
     return total_datasets
-
 
 def _has_failures(history):
     has_failures = False
@@ -162,8 +161,8 @@ def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrit
         download_success = True
         history_dataset_names = []
         try:
-           history_tar = tarfile.open(history_gz_name, 'r:gz')
-           history_dataset_names = history_tar.getmembers()
+            history_tar = tarfile.open(history_gz_name, 'r:gz')
+            history_dataset_names = history_tar.getmembers()
         except Exception as inst:
             download_success = False
             print ""
@@ -180,7 +179,6 @@ def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrit
 
         print "\t\tDownload complete. Extracting history archive file."
         history_tar.extractall(h_output_dir)
-        
 
         if delete_post_download and download_success:
             h_info.history['deleted'] = True
@@ -188,38 +186,41 @@ def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrit
         else:
             h_info.history['deleted'] = False
 
-        histor_tar.close()
+        history_tar.close()
     except RuntimeError:
         raise
     except Exception as inst:
         # Wrappering exception to make sure the exception is pickable.  HTTPError would cause UnpickleableErrors and hang process workers during pool join
-        raise RuntimeError("Error (type: %s) occurred when processing Sample, %s.  Review sample log file for more information: %s", type(inst), sample_name, runlog_filename)
+        raise RuntimeError("Error (type: %s) occurred when downloading History, %s.", type(inst), sample_name)
 
     return h_info
 
-def _report_status(num_histories, all_except, all_failed, all_waiting, all_running, all_successful):
+def _report_status(num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful):
     '''
     Reports status for the histories found in the All_Histories.json file
     '''
     logger = logging.getLogger(LOGGER_NAME)
 
     logger.info("TOTAL Number of Histories: " + str(num_histories) + " ( RUNNING = " + str(len(all_running)) + ", FAILED? = " + str(len(all_failed)) + ", NOT_FOUND = " + str(len(all_except)) + ", COMPLETED (OK) = " + str(len(all_successful)) + ", WAITING TO RUN = " + str(len(all_waiting)) + " )")
-    logger.info()
+    logger.info("")
     logger.info("UPLOAD HISTORY:")
-    logger.info("\tHISTORY_NAME => %s , REPORTED STATUS => %s , TOTAL_DATASETS => %s", upload_history.history['name'], upload_history.status['state'], get_total_datasets(upload_history.status)
-    logger.info()
+    if upload_history is not None:
+        logger.info("\tHISTORY_NAME => %s , REPORTED STATUS => %s , TOTAL_DATASETS => %s", upload_history.history['name'], upload_history.status['state'], _get_total_datasets(upload_history.status))
+    else:
+        logger.error("\tUnable to retreive status for the upload_history.")
+    logger.info("")
 
     if len(all_except) > 0:
-        logger.error()
+        logger.error("")
         logger.error("EXCEPTIONS OCCURRED! Unable to retreive status for " + str(len(all_except)) + " of " + str(num_histories) + " histories.")
         logger.error("\tErrors where thrown by Galaxy when attempting communication about the following histories.")
         logger.error("\tIn your browser, please check that Galaxy can be connected to, the Galaxy URL provided in the configuration file is accurate,")
         logger.error("\tand that the following histories exist in your 'Saved Histories' list in the Galaxy UI:")
         for h in all_except:
-            logger.error("\t\tHISTORY_NAME => %s",h['name'])
+            logger.error("\t\tHISTORY_NAME => %s", h['name'])
 
     if len(all_failed) > 0:
-        logger.info()
+        logger.info("")
         logger.error("FAILURES OCCURRED! NGS Analysis Failed for %s of %s histories.", str(len(all_failed)), str(num_histories))
         logger.error("\tFailures occurred when attempting the analyze the following samples/histories.")
         logger.error("\tIn your browser, please inspect the following histories and take necessary actions to re-run the NGS analysis:")
@@ -227,27 +228,27 @@ def _report_status(num_histories, all_except, all_failed, all_waiting, all_runni
             logger.error("\t\tHISTORY_NAME => %s , REPORTED STATUS => %s", h_info.history['name'], h_info.status['state'])
 
     if len(all_waiting) > 0:
-        logger.info()
+        logger.info("")
         logger.info("WAITING TO RUN. NGS Analysis has not yet started for %s of %s", str(len(all_waiting)), str(num_histories))
         for h_info in all_waiting:
             logger.info("\t\tHISTORY_NAME => %s , REPORTED STATUS => %s", h_info.history['name'], h_info.status['state'])
 
     if len(all_running) > 0:
-        logger.info()
+        logger.info("")
         logger.info("ACTIVELY RUNNING. NGS Analysis is currently underway for %s of %s", str(len(all_running)), str(num_histories))
         for h_info in all_running:
             logger.info("\t\tHISTORY_NAME => %s , PERCENT COMPLETED => %s", h_info.history['name'], str(h_info.status['percent_complete']))
 
     if len(all_successful) > 0:
-        logger.info()
+        logger.info("")
         logger.info("COMPLETED.  NGS Analysis is currently completed for %s of %s", str(len(all_successful)), str(num_histories))
         logger.info("\tThe following samples/histories have completed NGS analysis ran.  The output will still need to be inspected to ensure analysis accuracy and interpretation:")
         for h_info in all_successful:
-            logger.info("\t\tHISTORY_NAME => %s, PERCENT COMPLETED => %s", h_info.history['name'], str(h_info.status['percent_complete'])
+            logger.info("\t\tHISTORY_NAME => %s, PERCENT COMPLETED => %s", h_info.history['name'], str(h_info.status['percent_complete']))
 
-    logger.info()
+    logger.info("")
     logger.info("All status has been retrieved. This command can be re-ran as needed.")
-    logger.info()
+    logger.info("")
 
 def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_result_dir, num_histories, all_except, all_failed, all_waiting, all_running, all_successful, force_overwrite, delete_post_download, purge):
 
@@ -278,8 +279,8 @@ def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_r
     dl_results = {}
     for h_info in all_successful:
         # create a sub-directory with the history name
-        if not use_sample_result_dir:
-            h_output_dir = os.path.join(root_output_dir, (os.path.join(h_info.history['name'], "download"))
+        if use_sample_result_dir is False:
+            h_output_dir = os.path.join(root_output_dir, (os.path.join(h_info.history['name'], "download")))
         else:
             h_output_dir = os.path.join(h_info.history['sample_result_dir'], "download")
 
@@ -404,7 +405,6 @@ def main(argv=None):
     logger.setLevel(logging.DEBUG)
 
     no_date_formatter = logging.Formatter('%(levelname)s\t%(name)s\t%(message)s')
-    tab_formatter = '\t\t\t\t'
 
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setLevel(logging.DEBUG)
@@ -427,18 +427,23 @@ def main(argv=None):
         return 1
 
     # Get the configuration parmaters
-    api_key = _get_api_key(config_parser.get('Globals', 'api_file'))
-    galaxy_host = config_parser.get('Globals', 'galaxy_host')
-    delete_histories = _str2bool(config_parser.get('Globals', 'delete_post_download'))
-    if args.delete_post_download not None:
-        delete_histories = args.delete_post_download
-    purge_histories = _str2bool(config_parser.get('Globals', 'purge'))
+    try:
+        api_key = _get_api_key(config_parser.get('Globals', 'api_file'))
+        galaxy_host = config_parser.get('Globals', 'galaxy_host')
+        delete_histories = _str2bool(config_parser.get('Globals', 'delete_post_download'))
+        if args.delete_post_download is not None:
+            delete_histories = args.delete_post_download
+        purge_histories = _str2bool(config_parser.get('Globals', 'purge'))
+    except NoOptionError as e:
+        logger.error("Problem occured when reading configuration from %s. Please verify properly configured key names and values.", args.ini)
+        logger.exception(e)
+        return 7
 
     # Get a connection to Galaxy and a client to interact with Histories
     galaxyInstance = GalaxyInstance(galaxy_host, key=api_key)
     historyClient = HistoryClient(galaxyInstance)
 
-    logger.info()
+    logger.info("")
     logger.info("Locating Histories To Perform Action, %s, On ... ", args.action)
 
     # Open up the serialized History file that was saved for the batch run
@@ -448,9 +453,9 @@ def main(argv=None):
         logger.error("ERROR: Could not find All_Histories.json file in %s.", args.all_history_dir)
         logger.error("\tDid you use the workflow_runner.py to launch automated Galaxy NGS analysis? " + \
               "Check your configuration.ini file to make sure it has configued the correct output directory to inspect. ")
-        logger.error()
+        logger.error("")
         logger.error("\t** Note: All_Histories.json is a file automatically generated when the workflow_runner.py script is invoked to launch workflows.")
-        logger.error()
+        logger.error("")
         return 2
 
     all_history_json = open(all_history_json_filename, "rb")
@@ -459,16 +464,17 @@ def main(argv=None):
     except:
         logger.error("ERROR: Could not load any history records from All_Histories.json file in %s.", args.all_history_dir)
         logger.error("\tDid you use the workflow_runner.py to launch the automated Galaxy NGS analysis? Possibly the workflow_runner has not yet completed?")
-        logger.error()
+        logger.error("")
         return 3
 
-    logger.info("Loading List of Histories From : ", all_history_json.name)
+    logger.info("Loading List of Histories From : %s", all_history_json.name)
 
     all_successful = []
     all_running = []
     all_failed = []
     all_except = []
     all_waiting = []
+    upload_history = None
 
     for h in histories:
         # Example h_status object structures
@@ -498,7 +504,7 @@ def main(argv=None):
 
         history_info = HistoryInfo(h, h_status)
 
-        if h['upload_history']:
+        if str(h['upload_history']).lower() in ('true', 'yes'):
             upload_history = history_info
         else:
             if h_status['state'] == 'ok':
@@ -514,7 +520,7 @@ def main(argv=None):
 
     if args.action == "check_status":
 
-        _report_status(num_histories, all_except, all_failed, all_waiting, all_running, all_successful)
+        _report_status(num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful)
 
     elif args.action == "download":
 
@@ -525,8 +531,8 @@ def main(argv=None):
      
     elif args.action == "delete":
 
-    #def _delete(history_client, num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful, delete_failed_histories, purge_histories):
-    _delete(history_client, num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful, args.delete_failed_histories, purge_histories)
+        #def _delete(history_client, num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful, delete_failed_histories, purge_histories):
+        _delete(history_client, num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful, args.delete_failed_histories, purge_histories)
 
     return 0
 
