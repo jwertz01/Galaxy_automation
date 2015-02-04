@@ -7,12 +7,12 @@ from bioblend.galaxy.client import ConnectionError
 from ConfigParser import SafeConfigParser
 from ConfigParser import NoOptionError
 from requests.packages import urllib3
+from multiprocessing import Pool
 import sys
 import os
 import json
 import argparse
 import textwrap
-import subprocess
 import tarfile
 import logging
 
@@ -131,7 +131,7 @@ def _post_dl_callback(h_info):
    logger.info("DOWNLOADED History: %s", h_info.history['name'])
    logger.info("\tHistory Archive File: %s", h_info.history['download_gz'])
    logger.info("\tHistory download Directory: %s", h_info.history['download_dir'])
-   logger.info("\tDeleted History? %s", h_info.history['deleted'])
+   logger.info("\tDeleted History After Download? %s", h_info.history['deleted'])
    return
 
 def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrite, delete_post_download, purge):
@@ -148,7 +148,8 @@ def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrit
         
         if os.path.exists(history_gz_name):
             if not force_overwrite:
-                raise RuntimeError("History %s is already downloaded and located here: %s. SKIPPING.", h_info.history['name'], history_gz_name)
+                err_msg = "History %s is already downloaded and located here: %s. SKIPPING." % (h_info.history['name'], history_gz_name)
+                raise RuntimeError(err_msg)
 
         history_gz = open(history_gz_name, 'wb')
         jeha_id = history_client.export_history(h_info.history['id'], wait=True)
@@ -175,9 +176,9 @@ def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrit
             download_success = True
         else:
             download_success = False
-            raise RuntimeError("ERROR! Downloaded history file, %s, does not appear to be a valid tar archive file, or does not have an expected number of datasets (has %s). Please remove the file and try again.", history_gz_name, len(history_dataset_names))
+            err_msg = "ERROR! Downloaded history file, %s, does not appear to be a valid tar archive file, or does not have an expected number of datasets (has %s). Please remove the file and try again." % (history_gz_name, len(history_dataset_names))
+            raise RuntimeError(err_msg)
 
-        print "\t\tDownload complete. Extracting history archive file."
         history_tar.extractall(h_output_dir)
 
         if delete_post_download and download_success:
@@ -191,7 +192,8 @@ def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrit
         raise
     except Exception as inst:
         # Wrappering exception to make sure the exception is pickable.  HTTPError would cause UnpickleableErrors and hang process workers during pool join
-        raise RuntimeError("Error (type: %s) occurred when downloading History, %s.", type(inst), sample_name)
+        err_msg = "Error (type: %s) occurred when downloading History, %s." % (type(inst), h_info.history['name'])
+        raise RuntimeError(err_msg)
 
     return h_info
 
@@ -250,7 +252,7 @@ def _report_status(num_histories, upload_history, all_except, all_failed, all_wa
     logger.info("All status has been retrieved. This command can be re-ran as needed.")
     logger.info("")
 
-def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_result_dir, num_histories, all_except, all_failed, all_waiting, all_running, all_successful, force_overwrite, delete_post_download, purge):
+def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_result_dir, num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful, force_overwrite, delete_post_download, purge):
 
     logger = logging.getLogger(LOGGER_NAME)
 
@@ -287,19 +289,19 @@ def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_r
         result = pool.apply_async(_download_history, args=[galaxy_host, api_key, h_output_dir, h_info, force_overwrite, delete_post_download, purge], callback=_post_dl_callback)
         dl_results[h_info.history['name']] = result
 
-        #should be all done with processing.... this will block until all work is done
-        pool.close()
-        pool.join()
+    #should be all done with processing.... this will block until all work is done
+    pool.close()
+    pool.join()
 
-        # lets check the sucessfullness of the runs
-        for history_name in dl_results.keys():
-            history_result = dl_results[history_name]
-            if not history_result.successful():
-                logger.error("HISTORY DOWNLOAD ERROR! HISTORY NAME = %s", history_name)
-                try:
-                    history_result.get()
-                except Exception as inst:
-                    logger.exception(inst)
+    # lets check the sucessfullness of the runs
+    for history_name in dl_results.keys():
+        history_result = dl_results[history_name]
+        if not history_result.successful():
+            logger.error("\tHISTORY DOWNLOAD ERROR! HISTORY NAME = %s", history_name)
+            try:
+                history_result.get()
+            except Exception as inst:
+                logger.exception(inst)
 
 def _get_argparser():
     '''
@@ -526,7 +528,7 @@ def main(argv=None):
 
         num_processes = config_parser.get('Globals', 'num_processes')
 
-        _download(galaxy_host, api_key, num_processes, output_dir, use_sample_result_dir, num_histories, all_except, all_failed, all_waiting, all_running, all_successful, args.overwrite_existing_downloads, delete_histories, purge_histories)
+        _download(galaxy_host, api_key, num_processes, output_dir, use_sample_result_dir, num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful, args.overwrite_existing_downloads, delete_histories, purge_histories)
 
      
     elif args.action == "delete":
