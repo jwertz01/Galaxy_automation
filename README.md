@@ -4,5 +4,5 @@ Note that you must create and populate a file called api.key (unless you change 
 
 You will also need to copy configuration.example.ini and adjust it for your use of Galaxy.  Most of the time you should only have to edit configuration.ini file once.
 
-For more information on how to install, setup, configure and use these scripts: https://wiki.uiowa.edu/display/MORL/Galaxy+Analysis+on+Neon:wq!
+For more information on how to install, setup, configure and use these scripts: https://wiki.uiowa.edu/display/MORL/Galaxy+Analysis+on+Neon
 
