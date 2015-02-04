@@ -126,13 +126,13 @@ def _delete(history_client, num_histories, upload_history, all_except, all_faile
             logger.warning("\t\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => Unknown", h['name'])
 
 def _post_dl_callback(h_info):
-   logger = logging.getLogger(LOGGER_NAME)
+    logger = logging.getLogger(LOGGER_NAME)
 
-   logger.info("DOWNLOADED History: %s", h_info.history['name'])
-   logger.info("\tHistory Archive File: %s", h_info.history['download_gz'])
-   logger.info("\tHistory download Directory: %s", h_info.history['download_dir'])
-   logger.info("\tDeleted History After Download? %s", h_info.history['deleted'])
-   return
+    logger.info("DOWNLOADED History: %s", h_info.history['name'])
+    logger.info("\tHistory Archive File: %s", h_info.history['download_gz'])
+    logger.info("\tHistory download Directory: %s", h_info.history['download_dir'])
+    logger.info("\tDeleted History After Download? %s", str(h_info.history['deleted']))
+    return
 
 def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrite, delete_post_download, purge):
 
@@ -181,7 +181,7 @@ def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrit
 
         history_tar.extractall(h_output_dir)
 
-        if delete_post_download and download_success:
+        if (delete_post_download is True) and download_success:
             h_info.history['deleted'] = True
             history_client.delete_history(h_info.history['id'], purge=purge)
         else:
@@ -442,8 +442,8 @@ def main(argv=None):
         return 7
 
     # Get a connection to Galaxy and a client to interact with Histories
-    galaxyInstance = GalaxyInstance(galaxy_host, key=api_key)
-    historyClient = HistoryClient(galaxyInstance)
+    galaxy_instance = GalaxyInstance(galaxy_host, key=api_key)
+    history_client = HistoryClient(galaxy_instance)
 
     logger.info("")
     logger.info("Locating Histories To Perform Action, %s, On ... ", args.action)
