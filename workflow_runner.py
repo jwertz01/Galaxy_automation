@@ -659,6 +659,9 @@ def main(argv=None):
             # Lets store these in the output directory for now.  Possibly move at a
             # later time?
 
+            failed_samples = open(
+                os.path.join(output_dir, "Failed_Sample_Workflows.out"), "wb")
+
             # All_Histories.json will store serialized history objets for every history (inlucding upload history)
             # such that history status script can be run and give status updates about all histories involved
             # for the batch.
@@ -707,7 +710,7 @@ def main(argv=None):
                 result = pool.apply_async(_launch_workflow, args=[galaxy_host, api_key, workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir], callback=new_post_wf_run)
                 wf_results[sample_name] = result
 
-            #should be all done with processing.... this will block until all work is done
+            # should be all done with processing.... this will block until all work is done
             pool.close()
             pool.join()
 
@@ -720,7 +723,7 @@ def main(argv=None):
                         sample_result.get()
                     except Exception as inst:
                         # Write it out to failed log - need for retry.
-
+                        failed_samples.write(sample+"\n")
                         logger.error("Unexpected Error occurred: %s , %s ", type(inst), inst)
                         logger.exception(inst)
 
@@ -746,6 +749,8 @@ def main(argv=None):
             try:
                 all_history_json.flush()
                 all_history_json.close()
+                failed_samples.flush()
+                failed_samples.close()
             except Exception as inst:
                 logger.error("ERROR saving the history log file: %s.  This may cause problems when trying to use history_utils.py.", all_history_json.name)
                 logger.error("ERROR Information: type = %s, message = %s ", type(inst), inst)
