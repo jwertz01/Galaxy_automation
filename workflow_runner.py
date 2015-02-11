@@ -460,7 +460,7 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
         params = {'toolshed.g2.bx.psu.edu/repos/devteam/bwa_wrappers/bwa_wrapper/1.2.3': {'params': {'readGroup': {'rgid': sample_name,
                                                                                                                    'rglb': sample_name,
                                                                                                                    'rgsm': sample_name}}},
-                  'annotation_v2_wrapper': {'report_selector': {'input_notes': workflow_notes}}}
+                  'annotation_v2_wrapper': {'report_selector': {'input_notes': workflow['name']}}}
         rwf = workflow_client.run_workflow(workflow['id'],
                                           data_map,
                                           params=params,
@@ -472,7 +472,8 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
         local_logger.error("Unexpected Error occurred: %s : %s : %s", inst.__class__.__name__, inst.args, inst.message)
         local_logger.exception(inst)
         # Wrappering exception to make sure the exception is pickable.  HTTPError would cause UnpickleableErrors and hang process workers during pool join
-        raise RuntimeError("Error (type: %s) occurred when processing Sample, %s.  Review sample log file for more information: %s", type(inst), sample_name, runlog_filename)
+        error_msg = "Error (type: %s) occurred when processing Sample, %s.  Review sample log file for more information: %s" % (type(inst), sample_name, runlog_filename)
+        raise RuntimeError(error_msg)
     finally:
         logging.shutdown()
 
@@ -718,6 +719,8 @@ def main(argv=None):
                     try:
                         sample_result.get()
                     except Exception as inst:
+                        # Write it out to failed log - need for retry.
+                        
                         logger.error("Unexpected Error occurred: %s , %s ", type(inst), inst)
                         logger.exception(inst)
 
