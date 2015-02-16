@@ -194,7 +194,7 @@ def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrit
             h_info.history['deleted'] = False
 
         history_tar.close()
-    except RuntimeError, HistoryAlreadyDownloadedException:
+    except (RuntimeError, HistoryAlreadyDownloadedException):
         raise
     except Exception as inst:
         # Wrappering exception to make sure the exception is pickable.  HTTPError would cause UnpickleableErrors and hang process workers during pool join
