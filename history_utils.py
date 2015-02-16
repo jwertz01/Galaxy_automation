@@ -17,6 +17,15 @@ import tarfile
 import logging
 
 
+class HistoryAlreadyDownloadedException(Exception):
+    '''
+    Exception for indicating that the history has previously been downloaded.
+    '''
+    def __init__(self, message):
+        self.message = message
+    def __str__(self):
+        return repr(self.message)
+
 class MaxLevelFilter(logging.Filter):
     '''
     Logging Filter for seperating messages between stdout and stderr
@@ -149,7 +158,7 @@ def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrit
         if os.path.exists(history_gz_name):
             if not force_overwrite:
                 err_msg = "History %s is already downloaded and located here: %s. SKIPPING." % (h_info.history['name'], history_gz_name)
-                raise RuntimeError(err_msg)
+                raise HistoryAlreadyDownloadedException(err_msg)
 
         history_gz = open(history_gz_name, 'wb')
         jeha_id = history_client.export_history(h_info.history['id'], wait=True)
@@ -294,10 +303,12 @@ def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_r
     for history_name in dl_results.keys():
         history_result = dl_results[history_name]
         if not history_result.successful():
-            logger.error("HISTORY DOWNLOAD ERROR! HISTORY NAME = %s", history_name)
             try:
                 history_result.get()
+            except HistoryAlreadyDownloadedException as e_already_download:
+                logger.warning(e_already_download.message)
             except Exception as inst:
+                logger.error("HISTORY DOWNLOAD ERROR! HISTORY NAME = %s", history_name)
                 logger.exception(inst)
 
 def _get_argparser():
