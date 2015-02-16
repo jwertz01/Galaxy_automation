@@ -21,10 +21,7 @@ class HistoryAlreadyDownloadedException(Exception):
     '''
     Exception for indicating that the history has previously been downloaded.
     '''
-    def __init__(self, message):
-        self.message = message
-    def __str__(self):
-        return repr(self.message)
+    pass
 
 class MaxLevelFilter(logging.Filter):
     '''
@@ -157,7 +154,7 @@ def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrit
         
         if os.path.exists(history_gz_name):
             if not force_overwrite:
-                err_msg = "History %s is already downloaded and located here: %s. SKIPPING." % (h_info.history['name'], history_gz_name)
+                err_msg = "HISTORY ALREADY DOWNLOADED - SKIPPING: History %s is already downloaded and located here: %s." % (h_info.history['name'], history_gz_name)
                 raise HistoryAlreadyDownloadedException(err_msg)
 
         history_gz = open(history_gz_name, 'wb')
@@ -306,7 +303,7 @@ def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_r
             try:
                 history_result.get()
             except HistoryAlreadyDownloadedException as e_already_download:
-                logger.warning(e_already_download.message)
+                logger.warning("\t" + e_already_download.message)
             except Exception as inst:
                 logger.error("HISTORY DOWNLOAD ERROR! HISTORY NAME = %s", history_name)
                 logger.exception(inst)
