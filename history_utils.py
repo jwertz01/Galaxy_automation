@@ -166,11 +166,8 @@ def _download_history(galaxy_host, api_key, h_output_dir, h_info, force_overwrit
             history_dataset_names = history_tar.getmembers()
         except Exception as inst:
             download_success = False
-            print ""
-            print type(inst)
-            print inst.args
-            print inst
-            print ""
+            err_msg = "Failure occurred during history dowload, %s. Error: %s. Args: %s. Message: %s" % (h_info.history['name'],type(inst), inst.args, inst)
+            raise RuntimeError(err_msg)
         #check the file to make sure it seems sound.
         if download_success and (len(history_dataset_names) >= 10):
             download_success = True
@@ -297,7 +294,7 @@ def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_r
     for history_name in dl_results.keys():
         history_result = dl_results[history_name]
         if not history_result.successful():
-            logger.error("\tHISTORY DOWNLOAD ERROR! HISTORY NAME = %s", history_name)
+            logger.error("HISTORY DOWNLOAD ERROR! HISTORY NAME = %s", history_name)
             try:
                 history_result.get()
             except Exception as inst:
