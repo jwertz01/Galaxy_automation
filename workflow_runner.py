@@ -306,7 +306,7 @@ def _get_files(root_path, file_match_re):
     # or being passed in a fully qualified file name or someting else.
     # But for now....
     matches = []
-    for root, dirnames, filenames in os.walk(root_path):
+    for root, dirnames, filenames in os.walk(root_path, followlinks=True):
         for filename in fnmatch.filter(filenames, file_match_re):
             matches.append(os.path.join(root, filename))
     return matches
