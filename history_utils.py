@@ -255,16 +255,20 @@ def _report_status(num_histories, upload_history, all_except, all_failed, all_wa
     logger.info("All status has been retrieved. This command can be re-ran as needed.")
     logger.info("")
 
-def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_result_dir, num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful, force_overwrite, delete_post_download, purge):
+def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_result_dir, num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful, force_overwrite, delete_post_download, purge, download_failed_histories):
 
     logger = logging.getLogger(LOGGER_NAME)
 
     logger.info("DOWNLOADING COMPLETED HISTORIES:")
 
-    if len(all_successful) == 0:
-        logger.warning("\tNone of the Histories have completed successfully.  Run again later, or use the check_status option to view analysis progress. Exiting.")
+    all_download = all_successful
+    if (download_failed_histories)
+        all_download += all_failed
+
+    if (len(all_download) == 0):
+        logger.warning("\tNone of the Histories have completed workflow runs.  Run again later, or use the check_status option to view analysis progress. Exiting.")
         return 0
-    elif num_histories != (len(all_successful) + 1):
+    elif ((num_histories != (len(all_download) + 1)) && (download_failed_histories == False):
         logger.warning("\tNot all histories have completed successfully.  Will only download SUCCESSFULLY completed analysis histories.")
         logger.warning("\tThe following Histories will NOT be downloaded since they are FAILED, or QUEUED (WAITING), or RUNNING:")
         for h_info in all_failed:
@@ -276,18 +280,28 @@ def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_r
         for h in all_except:
             logger.warning("\t\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => Unknown", h['name'])
         logger.warning("\tDownloading %s SUCCESSFULLY Completed Histories out of %s total Histories:", len(all_successful), num_histories)
+    elif ((download_failed_histories == True) && (num_histories != (len(all_download) + 1)))
+        logger.warning("\tNot all histories have completed.  Will only download SUCCESSFULLY & FAILED completed analysis histories.")
+        logger.warning("\tThe following Histories will NOT be downloaded since they are QUEUED (WAITING), or RUNNING:")
+        for h_info in all_running:
+            logger.warning("\t\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => %s", h_info.history['name'], h_info.status['state'])
+        for h_info in all_waiting:
+            logger.warning("\t\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => %s", h_info.history['name'], h_info.status['state'])
+        for h in all_except:
+            logger.warning("\t\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => Unknown", h['name'])
+        logger.warning("\tDownloading %s SUCCESSFULLY or FAILED Completed Histories out of %s total Histories:", len(all_successful), num_histories)
     else:
-        logger.info("\tDownloading %s SUCCESSFULLY Completed Histories (skipping the Upload History: %s)", len(all_successful), upload_history.history['name'])
+        logger.info("\tDownloading %s Completed Histories (skipping the Upload History: %s)", len(all_download), upload_history.history['name'])
 
     pool = Pool(processes=int(num_processes))
 
     dl_results = {}
-    for h_info in all_successful:
+    for h_info in all_download:
         # create a sub-directory with the history name
         if use_sample_result_dir is False:
-            h_output_dir = os.path.join(root_output_dir, (os.path.join(h_info.history['name'], "download")))
+            h_output_dir = os.path.join(root_output_dir, h_info.history['name']))
         else:
-            h_output_dir = os.path.join(h_info.history['sample_result_dir'], "download")
+            h_output_dir = h_info.history['sample_result_dir']
 
         result = pool.apply_async(_download_history, args=[galaxy_host, api_key, h_output_dir, h_info, force_overwrite, delete_post_download, purge], callback=_post_dl_callback)
         dl_results[h_info.history['name']] = result
@@ -342,6 +356,7 @@ def _get_argparser():
     arg_parser.add_argument('-o', '--output_dir', help="directory to download and extract history results into. Default will be the root $ALL_HISTORY_DIR and each of the sample specific results directories generated when invoking workflow_runner.py", default='$ALL_HISTORY_DIR')
     arg_parser.add_argument('-i', '--ini', help="configuration ini file to load", default='configuration.ini')
     arg_parser.add_argument('-f', '--delete_failed_histories', action='store_true', help="delete failed histories in addition to the completed (ok) histories. Only used with action = \'delete\'")
+    arg_parser.add_argument('-df', '--download_failed_histories', action='store_true', help="download failed histories in addition to the completed (ok) histories. Only used with action = \'download\'", default=False)
 
     return arg_parser
 
