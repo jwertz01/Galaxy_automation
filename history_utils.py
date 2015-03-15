@@ -262,13 +262,13 @@ def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_r
     logger.info("DOWNLOADING COMPLETED HISTORIES:")
 
     all_download = all_successful
-    if (download_failed_histories)
+    if download_failed_histories:
         all_download += all_failed
 
     if (len(all_download) == 0):
         logger.warning("\tNone of the Histories have completed workflow runs.  Run again later, or use the check_status option to view analysis progress. Exiting.")
         return 0
-    elif ((num_histories != (len(all_download) + 1)) && (download_failed_histories == False):
+    elif ((num_histories != (len(all_download) + 1)) and not download_failed_histories):
         logger.warning("\tNot all histories have completed successfully.  Will only download SUCCESSFULLY completed analysis histories.")
         logger.warning("\tThe following Histories will NOT be downloaded since they are FAILED, or QUEUED (WAITING), or RUNNING:")
         for h_info in all_failed:
@@ -280,7 +280,7 @@ def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_r
         for h in all_except:
             logger.warning("\t\tHISTORY_NAME => \'%s\' : HISTORY_STATUS => Unknown", h['name'])
         logger.warning("\tDownloading %s SUCCESSFULLY Completed Histories out of %s total Histories:", len(all_successful), num_histories)
-    elif ((download_failed_histories == True) && (num_histories != (len(all_download) + 1)))
+    elif (download_failed_histories and (num_histories != (len(all_download) + 1))):
         logger.warning("\tNot all histories have completed.  Will only download SUCCESSFULLY & FAILED completed analysis histories.")
         logger.warning("\tThe following Histories will NOT be downloaded since they are QUEUED (WAITING), or RUNNING:")
         for h_info in all_running:
@@ -299,7 +299,7 @@ def _download(galaxy_host, api_key, num_processes, root_output_dir, use_sample_r
     for h_info in all_download:
         # create a sub-directory with the history name
         if use_sample_result_dir is False:
-            h_output_dir = os.path.join(root_output_dir, h_info.history['name']))
+            h_output_dir = os.path.join(root_output_dir, h_info.history['name'])
         else:
             h_output_dir = h_info.history['sample_result_dir']
 
@@ -549,7 +549,7 @@ def main(argv=None):
 
         num_processes = config_parser.get('Globals', 'num_processes')
 
-        _download(galaxy_host, api_key, num_processes, output_dir, use_sample_result_dir, num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful, args.overwrite_existing_downloads, delete_histories, purge_histories)
+        _download(galaxy_host, api_key, num_processes, output_dir, use_sample_result_dir, num_histories, upload_history, all_except, all_failed, all_waiting, all_running, all_successful, args.overwrite_existing_downloads, delete_histories, purge_histories, args.download_failed_histories)
 
      
     elif args.action == "delete":
