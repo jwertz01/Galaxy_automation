@@ -119,7 +119,7 @@ def _delete(history_client, num_histories, upload_history, all_except, all_faile
 
     if delete_upload_history is True:
         logger.info("\tAll Result Histories Deleted, Deleting Upload History: %s", upload_history.history['name'])
-        history_client.delete_history(upload_history.history['id'])
+        history_client.delete_history(upload_history.history['id'],purge_histories)
         logger.info("\t\tHISTORY %s DELETED. Purged? %s", upload_history.history['name'], purge_histories)
     else:
         logger.warning("\tIGNORING the following Histories because they are Running, Queued, or Can not be Reached for some reason:")
