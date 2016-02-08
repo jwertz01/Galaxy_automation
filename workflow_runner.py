@@ -8,6 +8,7 @@ from bioblend.galaxy.histories import HistoryClient
 from bioblend.galaxy.tools import ToolClient
 from bioblend.galaxy.workflows import WorkflowClient
 from bioblend.galaxy.client import ConnectionError
+from bioblend.galaxy.ftpfiles import FTPFilesClient
 from requests.packages import urllib3
 from ConfigParser import SafeConfigParser
 from multiprocessing import Pool
@@ -209,7 +210,7 @@ def _get_notes(history, workflow, library_list_mapping, library_datasets, upload
                 workflow_label + "("+wf_input + ") => " + dataset_name + " (" + dataset_id + ") " + dataset_file)
     return notes
 
-def _get_all_upload_files(root_path, upload_list_mapping, config_parser):
+def _get_all_upload_files(root_path, upload_list_mapping, config_parser, upload_protocol, galaxy_instance):
     '''
     Locates all the files that should be uploaded and groups them together according to workflow inputs.
 
@@ -221,6 +222,12 @@ def _get_all_upload_files(root_path, upload_list_mapping, config_parser):
 
     :type: config_parser: SafeConfigParser
     :param config_parser: The configuration parser for loading configuration from the ini file
+
+    :type: upload_protocol: string
+    :param upload_protocol: whether to upload files via HTTP or FTP
+
+    :type: galaxy_instance: bioblend.galaxy.GalaxyInstance
+    :param galaxy_instance: A base representation of an instance of Galaxy, identified by a URL and a user’s API key  
 
     :return list of dict objects that contain a mapping of workflow_input_name to local_file_name for each workflow to be ran
 
@@ -237,23 +244,25 @@ def _get_all_upload_files(root_path, upload_list_mapping, config_parser):
         upload_type = upload_list_mapping[upload_input_name]
         if upload_type in UPLOAD_TYPE_GLOBALS:
             if upload_type == UPLOAD_TYPE_READ1:
-                file_list = _get_files(root_path, config_parser.get('Globals', 'READ1_re'))
+                file_list = _get_files(root_path, config_parser.get('Globals', 'READ1_re'), upload_protocol, galaxy_instance)
                 read1_file_list = file_list
             elif upload_type == UPLOAD_TYPE_READ2:
                 if read1_file_list is None:
-                    raise RuntimeError("Cound not find any READ1 files.  If READ2 files are configured as workflow inputs (in config.ini), the READ1 inputs must be listed first int he upload_input_ids.")
+                    raise RuntimeError("Cound not find any READ1 files.  If READ2 files are configured as workflow inputs (in config.ini), the READ1 inputs must be listed first in the upload_input_ids.")
                 else:
                     file_list = []
+                    read2_file_list = _get_files(root_path, re.sub('R1', 'R2', config_parser.get('Globals', 'READ1_re')), upload_protocol, galaxy_instance)
                     for read1_file in read1_file_list:
-                        r2_file = _get_r2_file(read1_file, config_parser)
+                        r2_file = _get_r2_file(read1_file, config_parser, upload_protocol, read1_file_list + read2_file_list)
                         file_list.append(r2_file)
 
         else:
             # assume it is a regular expression - generic
-            file_list = _get_files(root_path, upload_type)
+            file_list = _get_files(root_path, upload_type, upload_protocol, galaxy_instance)
 
         for input_file in file_list:
             index = file_list.index(input_file)
+
             try:
                 wf_upload_input_file_map = upload_file_tuple_list[index]
             except IndexError:
@@ -263,7 +272,7 @@ def _get_all_upload_files(root_path, upload_list_mapping, config_parser):
 
     return upload_file_tuple_list
 
-def _get_r2_file(r1_file, config_parser):
+def _get_r2_file(r1_file, config_parser, upload_protocol, file_list):
     '''
     Given the forward read fastq file name, compute what the reverse read fastq file name should be.
 
@@ -273,6 +282,12 @@ def _get_r2_file(r1_file, config_parser):
     :type: config_parser: SafeConfigParser
     :param config_parser: The configuration parser for loading configuration from the ini file
 
+    :type: upload_protocol: string
+    :param upload_protocol: whether to upload files via HTTP or FTP
+
+    :type: file_list: list
+    :param file_list: list of R1 and R2 files in local or FTP directory (depending on upload_protocol)
+
     :return String - fully qualified file name for the reverse read file
     '''
     read1_sub_re = config_parser.get('Globals', 'READ1_sub_re')
@@ -280,14 +295,21 @@ def _get_r2_file(r1_file, config_parser):
 
     r1_sub_pattern = re.compile(read1_sub_re, re.IGNORECASE)
     r2_file = r1_sub_pattern.sub(read2_sub_re, r1_file)
-    if not os.path.exists(r1_file):
-        raise RuntimeError("%s R1 file Not Found" % r1_file)
-    if not os.path.exists(r2_file):
-        raise RuntimeError("%s R2 file Not Found" % r1_file)
+
+    if upload_protocol == "http":
+        if not os.path.exists(r1_file):
+            raise RuntimeError("%s R1 file Not Found" % r1_file)
+        if not os.path.exists(r2_file):
+            raise RuntimeError("%s R2 file Not Found" % r1_file)
+    else:  # ftp
+        if r1_file not in file_list:
+            raise RuntimeError("%s R1 file Not Found" % r1_file)
+        if r2_file not in file_list:
+            raise RuntimeError("%s R2 file Not Found" % r1_file)       
 
     return r2_file
 
-def _get_files(root_path, file_match_re):
+def _get_files(root_path, file_match_re, upload_protocol, galaxy_instance):
     '''
     Traverse all files under the root directory (including sub-directories) and build a list
     of files whose name match the specified compiled regular expression
@@ -298,6 +320,12 @@ def _get_files(root_path, file_match_re):
     :type file_match_re: re Regular Expression Object (compiled via re.compile() from a regular expression pattern)
     :param file_match_re: The regular expression object used to match filenames to find.
 
+    :type: upload_protocol: string
+    :param upload_protocol: whether to upload files via HTTP or FTP
+
+    :type: galaxy_instance: bioblend.galaxy.GalaxyInstance
+    :param galaxy_instance: A base representation of an instance of Galaxy, identified by a URL and a user’s API key  
+
     :return list of file names that match the regular expression under the root directory
 
     '''
@@ -306,9 +334,15 @@ def _get_files(root_path, file_match_re):
     # or being passed in a fully qualified file name or someting else.
     # But for now....
     matches = []
-    for root, dirnames, filenames in os.walk(root_path, followlinks=True):
-        for filename in fnmatch.filter(filenames, file_match_re):
-            matches.append(os.path.join(root, filename))
+    if upload_protocol == "http":
+        for root, dirnames, filenames in os.walk(root_path, followlinks=True):
+            for filename in fnmatch.filter(filenames, file_match_re):
+                matches.append(os.path.join(root, filename))
+    else:  # ftp
+        ftp_client = FTPFilesClient(galaxy_instance)
+        filenames = [z['path'] for z in ftp_client.get_ftp_files()]
+        matches = fnmatch.filter(filenames, file_match_re)
+
     return matches
 
 def _post_wf_run(history, all_histories):
@@ -327,7 +361,7 @@ def _post_wf_run(history, all_histories):
 
     all_histories.append(history)
 
-def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_input_files_map, genome, library_list_mapping, library_datasets, sample_name, result_dir ):
+def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_input_files_map, genome, library_list_mapping, library_datasets, sample_name, result_dir, upload_protocol ):
     '''
     Launches a workflow in Galaxy.  Assumed that this function is thread safe - can be run leveraging multiprocessing python logic asyncronously.
 
@@ -360,6 +394,9 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
 
     :type: result_dir: string
     :param result_dir: The directory to place results into (log files and serialized JSON history objects)
+
+    :type: upload_protocol: string
+    :param upload_protocol: whether to upload files via HTTP or FTP
 
     :return bioblend History JSON object which will hold all the workflow results for the history.
             The history JSON object will also be augmented with the following additional data:
@@ -431,8 +468,12 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
         upload_dataset_map = {}
         for wf_inputname in upload_input_files_map.keys():
             upload_file = upload_input_files_map[wf_inputname]
-            input_upload_out = tool_client.upload_file(
-                upload_file, upload_history['id'], file_type='fastqsanger', dbkey=genome)
+            if upload_protocol == "http":
+                input_upload_out = tool_client.upload_file(
+                    upload_file, upload_history['id'], file_type='fastqsanger', dbkey=genome)
+            else:
+                input_upload_out = tool_client.upload_from_ftp(
+                    upload_file, upload_history['id'], file_type='fastqsanger', dbkey=genome)
             local_logger.info("\tUploaded: %s => %s" % (wf_inputname, upload_file))
             input_dataset = input_upload_out['outputs'][0]
             upload_dataset_map[wf_inputname] = input_dataset
@@ -498,7 +539,7 @@ def _get_argparser():
                                                     (All_Histories.json) that will be used by history_utils.py for taking additional
                                                     actions on the generated result histories from each workflow launch.
 
-                                                    Galaxy connection and workflow confirguration information is loaded from configuration.ini file.
+                                                    Galaxy connection and workflow configuration information is loaded from configuration.ini file.
                                             '''),
                                          epilog=textwrap.dedent('''\
                                             Examples:
@@ -569,12 +610,12 @@ def main(argv=None):
     stdout_handler.addFilter(MaxLevelFilter(logging.INFO))
     stdout_handler.setFormatter(no_date_formatter)
 
-    stderr_hander = logging.StreamHandler(sys.stderr)
-    stderr_hander.setLevel(logging.WARNING)
-    stderr_hander.setFormatter(no_date_formatter)
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setLevel(logging.WARNING)
+    stderr_handler.setFormatter(no_date_formatter)
 
     logger.addHandler(stdout_handler)
-    logger.addHandler(stderr_hander)
+    logger.addHandler(stderr_handler)
 
     arg_parser = _get_argparser()
     if argv is None:
@@ -592,7 +633,7 @@ def main(argv=None):
         return 1
 
 
-
+    # Default output_dir is $INPUT_DIR/results
     if args.output_dir.startswith('$'):
         output_dir = os.path.join(args.input_dir, "results")
     else:
@@ -619,14 +660,25 @@ def main(argv=None):
         api_key = _get_api_key(config_parser.get('Globals', 'api_file'))
         galaxy_host = config_parser.get('Globals', 'galaxy_host')
         file_name_re = re.compile(config_parser.get('Globals', 'sample_re'))
-        library_input_ids = ''.join(ch for ch in config_parser.get('Globals', 'library_input_ids') if ch != '\n')
+        library_input_ids = config_parser.get('Globals', 'library_input_ids').replace('\n', '')
         library_dataset_list = library_input_ids.split(',')
-        upload_input_ids = ''.join(ch for ch in config_parser.get('Globals', 'upload_input_ids') if ch != '\n')
+        upload_input_ids = config_parser.get('Globals', 'upload_input_ids').replace('\n', '')
         upload_dataset_list = upload_input_ids.split(',')
         genome = config_parser.get('Globals', 'genome')
         default_lib = config_parser.get('Globals', 'default_lib')
         workflow_id = config_parser.get('Globals', 'workflow_id')
         num_processes = config_parser.get('Globals', 'num_processes')
+        upload_protocol = config_parser.get('Globals', 'upload_protocol').lower()
+
+        # Check upload protocol
+        accepted_protocols = ["http", "ftp"]
+        default_protocol = "http"
+        if not upload_protocol:
+            upload_protocol = default_protocol
+            logger.info("Upload protocol not specified. Using default: %s" % default_protocol)
+        if upload_protocol not in accepted_protocols:
+            logger.error("Unrecognized upload protocol: %s. Please specify one of the following values: %s" % (upload_protocol, ', '.join(accepted_protocols)))
+            return 7
 
         pool = Pool(processes=int(num_processes))
 
@@ -637,9 +689,11 @@ def main(argv=None):
         # Start to officially log into the results directory
         logger.info("")
         logger.info("Locating input files.  Searching the following directory (and child directories): \n%s%s" % (tab_formatter, args.input_dir))
-
-        library_list_mapping = {}
-        upload_list_mapping = {}
+        # Put library and upload config into dicts
+        library_list_mapping = {}  # {filename: ID}
+        upload_list_mapping = {}          # {upload input name: upload type}
+        # upload input name is just a label ("R1 FastQ" or "R2 Fastq") to use as dict key
+        # upload type is READ1 or READ2 or other regex. READ1 and READ2 correspond to READ*_re in config
         for data in library_dataset_list:
             key, value = data.split(':')
             library_list_mapping[key] = value
@@ -647,12 +701,15 @@ def main(argv=None):
             key, value = data.split(':')
             upload_list_mapping[key] = value
 
-        upload_wf_input_files_list = _get_all_upload_files(args.input_dir, upload_list_mapping, config_parser)
+        upload_wf_input_files_list = _get_all_upload_files(args.input_dir, upload_list_mapping, config_parser, upload_protocol, galaxy_instance)
 
         #files = _get_files(args.input_dir, read1_re)
 
         if len(upload_wf_input_files_list) == 0:
-            logger.warning("Not able to find any input files looked in %s" % args.input_dir)
+            if upload_protocol == "http":
+                logger.warning("Not able to find any input files looked in %s" % args.input_dir)
+            else:  #ftp
+                logger.warning("Not able to find any input files uploaded via FTP.")
         else:
             # Input files have been found, lets try to prep for running workflows.
 
@@ -708,7 +765,7 @@ def main(argv=None):
                     logger.info("\t%s => %s" % (wf_input_name, upload_wf_input_files_map[wf_input_name]))
 
                 new_post_wf_run = partial(_post_wf_run, all_histories=all_histories)
-                result = pool.apply_async(_launch_workflow, args=[galaxy_host, api_key, workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir], callback=new_post_wf_run)
+                result = pool.apply_async(_launch_workflow, args=[galaxy_host, api_key, workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir, upload_protocol], callback=new_post_wf_run)
                 wf_results[sample_name] = result
 
             # should be all done with processing.... this will block until all work is done
