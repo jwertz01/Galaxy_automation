@@ -227,7 +227,7 @@ def _get_all_upload_files(root_path, upload_list_mapping, config_parser, upload_
     :param upload_protocol: whether to upload files via HTTP or FTP
 
     :type: galaxy_instance: bioblend.galaxy.GalaxyInstance
-    :param galaxy_instance: A base representation of an instance of Galaxy, identified by a URL and a user’s API key  
+    :param galaxy_instance: A base representation of an instance of Galaxy, identified by a URL and a user API key
 
     :return list of dict objects that contain a mapping of workflow_input_name to local_file_name for each workflow to be ran
 
@@ -324,7 +324,7 @@ def _get_files(root_path, file_match_re, upload_protocol, galaxy_instance):
     :param upload_protocol: whether to upload files via HTTP or FTP
 
     :type: galaxy_instance: bioblend.galaxy.GalaxyInstance
-    :param galaxy_instance: A base representation of an instance of Galaxy, identified by a URL and a user’s API key  
+    :param galaxy_instance: A base representation of an instance of Galaxy, identified by a URL and a user API key  
 
     :return list of file names that match the regular expression under the root directory
 
@@ -342,7 +342,6 @@ def _get_files(root_path, file_match_re, upload_protocol, galaxy_instance):
         ftp_client = FTPFilesClient(galaxy_instance)
         filenames = [z['path'] for z in ftp_client.get_ftp_files()]
         matches = fnmatch.filter(filenames, file_match_re)
-
     return matches
 
 def _post_wf_run(history, all_histories):
@@ -528,7 +527,7 @@ def _get_argparser():
     :return: Configured parsrer for processing arguments supplied to main method (for example from command line) :argparse.ArgumentParser: argparse ArgumentParser object
     '''
     arg_parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                         usage='%(prog)s input_dir [OPTIONS]',
+                                         #usage='%(prog)s [OPTIONS]',
                                          description=textwrap.dedent('''\
                                                     Automatically launch Galaxy workflows, including uploading input files
                                                     and importing of additional input files from Galaxy shared data libraries.
@@ -553,9 +552,9 @@ def _get_argparser():
                                             workflow_runner.py /Users/annblack/GalaxyAutomation/fastqs/batch23 -o /Users/annblack/Results/batch23/results -i configuration.eablck.ini
 
                                             '''))
-    arg_parser.add_argument('input_dir', help="directory which contains the workflow input files (subfolders will be traversed) that need to be uploaded.  IE, the files used to match to upload_input_ids (configuration.ini)")
+    arg_parser.add_argument('-i', '--input_dir', help="directory which contains the workflow input files (subfolders will be traversed) that need to be uploaded.  IE, the files used to match to upload_input_ids (configuration.ini)")
     arg_parser.add_argument('-o', '--output_dir', help="directory to save logs into as well as history log file (All_Histories.json, used by the history_utils.py tool) Recommended to also be a directory you would like to download workflow results into. Directory will be created if it does not exist. Default will be $INPUT_DIR/results", default='$INPUT_DIR/results')
-    arg_parser.add_argument('-i', '--ini', help="configuration ini file to load", default='configuration.ini')
+    arg_parser.add_argument('-c', '--config', help="configuration ini file to load", default='configuration.ini')
 
     return arg_parser
 
@@ -572,16 +571,16 @@ def _parse_ini(args):
 
     config_parser = SafeConfigParser()
 
-    if args.ini == 'configuration.ini':
+    if args.config == 'configuration.ini':
         logger.info("A configuration file was not specified when running the command.  Will look for a default file \'configuration.ini\' to load configuration from.")
-        if not os.path.isfile(args.ini):
+        if not os.path.isfile(args.config):
             raise RuntimeError("The configuration file, %s, does not exist. Create a configuration ini file and try again. Exiting." % (args.ini))
             
         config_parser.read('configuration.ini')
-    elif args.ini.endswith('.ini'):
-        if not os.path.isfile(args.ini):
+    elif args.config.endswith('.ini'):
+        if not os.path.isfile(args.config):
             raise RuntimeError("The configuration file, %s, does not exist. Create a configuration ini file and try again. Exiting." % (args.ini))
-        config_parser.read(args.ini)
+        config_parser.read(args.config)
     else:
         raise RuntimeError("The configuration ini file must end with .ini, the file specified was %s" % (args.ini))
 
@@ -618,11 +617,7 @@ def main(argv=None):
     logger.addHandler(stderr_handler)
 
     arg_parser = _get_argparser()
-    if argv is None:
-        args = arg_parser.parse_args()
-    else:
-        args = arg_parser.parse_args(argv)
-
+    args = arg_parser.parse_args(argv)
 
     try:
         config_parser = _parse_ini(args)
@@ -632,10 +627,12 @@ def main(argv=None):
         arg_parser.print_usage()
         return 1
 
-
     # Default output_dir is $INPUT_DIR/results
     if args.output_dir.startswith('$'):
-        output_dir = os.path.join(args.input_dir, "results")
+        if args.input_dir:
+            output_dir = os.path.join(args.input_dir, "results")
+        else:
+            output_dir = "results"
     else:
         output_dir = args.output_dir
 
@@ -679,6 +676,14 @@ def main(argv=None):
         if upload_protocol not in accepted_protocols:
             logger.error("Unrecognized upload protocol: %s. Please specify one of the following values: %s" % (upload_protocol, ', '.join(accepted_protocols)))
             return 7
+        if args.input_dir is None:
+            if upload_protocol == "http":
+                arg_parser.print_usage()
+                logger.error("Input directory argument required if upload protocol is http.")
+                return 8
+        if upload_protocol == "ftp" and args.input_dir is not None:
+            logger.error("Input directory must not be specified if upload protocol is ftp.")
+            return 9
 
         pool = Pool(processes=int(num_processes))
 
@@ -688,7 +693,8 @@ def main(argv=None):
 
         # Start to officially log into the results directory
         logger.info("")
-        logger.info("Locating input files.  Searching the following directory (and child directories): \n%s%s" % (tab_formatter, args.input_dir))
+        input_dir = args.input_dir if (upload_protocol == "http") else "[FTP directory]"
+        logger.info("Locating input files.  Searching the following directory (and child directories): \n%s%s" % (tab_formatter, input_dir))
         # Put library and upload config into dicts
         library_list_mapping = {}  # {filename: ID}
         upload_list_mapping = {}          # {upload input name: upload type}
@@ -704,10 +710,9 @@ def main(argv=None):
         upload_wf_input_files_list = _get_all_upload_files(args.input_dir, upload_list_mapping, config_parser, upload_protocol, galaxy_instance)
 
         #files = _get_files(args.input_dir, read1_re)
-
         if len(upload_wf_input_files_list) == 0:
             if upload_protocol == "http":
-                logger.warning("Not able to find any input files looked in %s" % args.input_dir)
+                logger.warning("Not able to find any input files. Looked in %s" % args.input_dir)
             else:  #ftp
                 logger.warning("Not able to find any input files uploaded via FTP.")
         else:
@@ -743,9 +748,21 @@ def main(argv=None):
             # Files have been found.  Lets create a common history and use it to
             # upload all inputs and all data library input files.  A new history
             # will be created for each sample workflow run to store only results.
-            normalized_input_dir = args.input_dir
-            if args.input_dir.endswith(os.path.sep):
+            if upload_protocol == "http":
+                dir_arg = args.input_dir
+            # elif os.path.basename(args.output_dir) != "results"
+            #     dir_arg = args.output_dir
+            else:
+                sample_names = []
+                for upload_wf_input_files_map in upload_wf_input_files_list:
+                    sample_name = _parse_sample_name(upload_wf_input_files_map.values()[0], file_name_re)
+                    sample_names.append(sample_name)
+                dir_arg = ','.join(sample_names)
+
+            normalized_input_dir = dir_arg
+            if dir_arg.endswith(os.path.sep):
                 normalized_input_dir = normalized_input_dir[:-1]
+
             batch_name = os.path.basename(normalized_input_dir)
             logger.info("All input files will be uploaded/imported into the Galaxy history: %s" % batch_name)
             upload_history = history_client.create_history(batch_name)
