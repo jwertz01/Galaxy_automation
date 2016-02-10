@@ -676,11 +676,10 @@ def main(argv=None):
         if upload_protocol not in accepted_protocols:
             logger.error("Unrecognized upload protocol: %s. Please specify one of the following values: %s" % (upload_protocol, ', '.join(accepted_protocols)))
             return 7
-        if args.input_dir is None:
-            if upload_protocol == "http":
-                arg_parser.print_usage()
-                logger.error("Input directory argument required if upload protocol is http.")
-                return 8
+        if upload_protocol == "http" and args.input_dir is None:
+            arg_parser.print_usage()
+            logger.error("Input directory argument required if upload protocol is http.")
+            return 8
         if upload_protocol == "ftp" and args.input_dir is not None:
             logger.error("Input directory must not be specified if upload protocol is ftp.")
             return 9
@@ -750,20 +749,18 @@ def main(argv=None):
             # will be created for each sample workflow run to store only results.
             if upload_protocol == "http":
                 dir_arg = args.input_dir
-            # elif os.path.basename(args.output_dir) != "results"
-            #     dir_arg = args.output_dir
             else:
                 sample_names = []
                 for upload_wf_input_files_map in upload_wf_input_files_list:
                     sample_name = _parse_sample_name(upload_wf_input_files_map.values()[0], file_name_re)
                     sample_names.append(sample_name)
-                dir_arg = ','.join(sample_names)
+                dir_arg = ",".join(sample_names)
 
             normalized_input_dir = dir_arg
             if dir_arg.endswith(os.path.sep):
                 normalized_input_dir = normalized_input_dir[:-1]
 
-            batch_name = os.path.basename(normalized_input_dir)
+            batch_name = "Input_files_%s" % os.path.basename(normalized_input_dir)
             logger.info("All input files will be uploaded/imported into the Galaxy history: %s" % batch_name)
             upload_history = history_client.create_history(batch_name)
             upload_history['upload_history'] = True
