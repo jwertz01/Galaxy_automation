@@ -426,7 +426,6 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
         os.makedirs(sample_result_dir)
 
     # Clean up any existing file handlers (this is due to multi-processor threads)
-    # could this cause issues?
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
 
@@ -574,15 +573,15 @@ def _parse_ini(args):
     if args.config == 'configuration.ini':
         logger.info("A configuration file was not specified when running the command.  Will look for a default file \'configuration.ini\' to load configuration from.")
         if not os.path.isfile(args.config):
-            raise RuntimeError("The configuration file, %s, does not exist. Create a configuration ini file and try again. Exiting." % (args.ini))
+            raise RuntimeError("The configuration file, %s, does not exist. Create a configuration ini file and try again. Exiting." % (args.config))
             
         config_parser.read('configuration.ini')
     elif args.config.endswith('.ini'):
         if not os.path.isfile(args.config):
-            raise RuntimeError("The configuration file, %s, does not exist. Create a configuration ini file and try again. Exiting." % (args.ini))
+            raise RuntimeError("The configuration file, %s, does not exist. Create a configuration ini file and try again. Exiting." % (args.config))
         config_parser.read(args.config)
     else:
-        raise RuntimeError("The configuration ini file must end with .ini, the file specified was %s" % (args.ini))
+        raise RuntimeError("The configuration ini file must end with .ini, the file specified was %s" % (args.config))
 
     return config_parser
 
@@ -754,13 +753,13 @@ def main(argv=None):
                 for upload_wf_input_files_map in upload_wf_input_files_list:
                     sample_name = _parse_sample_name(upload_wf_input_files_map.values()[0], file_name_re)
                     sample_names.append(sample_name)
-                dir_arg = ",".join(sample_names)
+                dir_arg = "|".join(sample_names)
 
             normalized_input_dir = dir_arg
             if dir_arg.endswith(os.path.sep):
                 normalized_input_dir = normalized_input_dir[:-1]
 
-            batch_name = "Input_files_%s" % os.path.basename(normalized_input_dir)
+            batch_name = "Input_files:%s" % os.path.basename(normalized_input_dir)
             logger.info("All input files will be uploaded/imported into the Galaxy history: %s" % batch_name)
             upload_history = history_client.create_history(batch_name)
             upload_history['upload_history'] = True
