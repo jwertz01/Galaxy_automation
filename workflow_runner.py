@@ -677,7 +677,7 @@ def main(argv=None):
             logger.error("Input directory argument required if upload protocol is http.")
             return 8
         if upload_protocol == "ftp" and args.input_dir is None:
-            logger.error("Batch name must not be specified if upload protocol is ftp.")
+            logger.error("Batch name must be specified if upload protocol is ftp. (Batch name is used to name the upload Galaxy history and tag all result histories for easy lookup.)")
             return 9
 
         pool = Pool(processes=int(num_processes))
