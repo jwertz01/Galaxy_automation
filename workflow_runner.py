@@ -759,7 +759,7 @@ def main(argv=None):
 
             if args.input_dir is None:
                 batch_name = "Input_files:%s" % os.path.basename(normalized_input_dir)
-            else if upload_protocol == "http":
+            elif upload_protocol == "http":
                 batch_name = os.path.basename(normalized_input_dir)
             else:
                 batch_name = args.input_dir
