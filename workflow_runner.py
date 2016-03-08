@@ -1,5 +1,5 @@
 #!/usr/bin/python
-__author__ = 'tbair,eablck'
+__author__ = 'tbair,eablck,jwertz'
 
 # Needs python 2.7 or higher for functionality
 
@@ -33,11 +33,11 @@ class MaxLevelFilter(logging.Filter):
         self.level = level
 
     def filter(self, record):
-        return record.levelno <= self.level 
+        return record.levelno <= self.level
 
 def _get_api_key(file_name):
     '''
-    Reads the api key from file and returns 
+    Reads the api key from file and returns
 
     :type file_path: string
     :param file_path: the qualified path name of the file containing the api key
@@ -76,16 +76,16 @@ def _setup_base_datamap(workflow, library_list_mapping, library_datasets, upload
     :type workflow: returned JSON object from WorkflowClient.show_workflow
     :param workflow: a description of the workflow and its iputs as a JSON object
 
-    :type library_list_mapping: dict 
-    :param library_list_mapping: a map of workflow input names to galaxy library dataset ids 
+    :type library_list_mapping: dict
+    :param library_list_mapping: a map of workflow input names to galaxy library dataset ids
 
-    :type library_datasets: list of Galaxy DataSet JSON objects 
+    :type library_datasets: list of Galaxy DataSet JSON objects
     :param library_datasets: a list of the library datasets that were imported into the upload history
 
     :type upload_dataset_map: dict of String:Galaxy DataSet JSON objects
     :param upload_dataset_map: a map/dict of workflow input names to files/datasets that should have been uploaded from local filesystem
 
-    :return: a dataset map depicting the mapping of workflow inputs to galaxy dataset ids, formatted as needed by 
+    :return: a dataset map depicting the mapping of workflow inputs to galaxy dataset ids, formatted as needed bys
              bioblend WorkflowClient run_workflow
     '''
     datamap = {}
@@ -94,12 +94,10 @@ def _setup_base_datamap(workflow, library_list_mapping, library_datasets, upload
         workflow_label = workflow['inputs'][w_input]['label']
         # find mapping if present
         if workflow_label in library_list_mapping:
-            if not workflow_label in UPLOAD_TYPE_GLOBALS:
-                data_set = {
-                    'id': library_datasets[workflow_label]['id'], 'hda_ldda': library_datasets[workflow_label]['hda_ldda']}
+            if workflow_label not in UPLOAD_TYPE_GLOBALS:
+                data_set = {'id': library_datasets[workflow_label]['id'], 'hda_ldda': library_datasets[workflow_label]['hda_ldda']}
         elif workflow_label in upload_dataset_map:
-            data_set = {
-                    'id': upload_dataset_map[workflow_label]['id'], 'hda_ldda': 'hda'}
+            data_set = {'id': upload_dataset_map[workflow_label]['id'], 'hda_ldda': 'hda'}
         else:
             labels = ""
             for wf_input in workflow['inputs'].keys():
@@ -119,8 +117,8 @@ def _import_library_datasets(history_client, upload_history, library_dataset_lis
     :param upload_history: Galaxy JSON history object - expected to have an 'id' attribute
 
     :type library_dataset_list: list
-    :param library_dataset_list: a list of of <workflow_input_name>:<library_dataset_galaxy_id> tuples 
-        read from the configuration ini.  The library dataset galaxy ids are used to identify, and locate the 
+    :param library_dataset_list: a list of of <workflow_input_name>:<library_dataset_galaxy_id> tuples
+        read from the configuration ini.  The library dataset galaxy ids are used to identify, and locate the
         library dataset files to import into the upload_history
 
     :type default_lib: string
@@ -152,7 +150,7 @@ def _import_library_datasets(history_client, upload_history, library_dataset_lis
 def _get_notes(history, workflow, library_list_mapping, library_datasets, upload_dataset_map, upload_input_files_map):
     '''
     Builds up a set of audit log messages about the automated workflow run for this specific sample.
-    The notes are used in the logging of workflow automation run logs as well as what gets passed into 
+    The notes are used in the logging of workflow automation run logs as well as what gets passed into
     the workflow if RUN_SUMMARY is specified in the configuration.ini file
 
     :type history: bioblend Galaxy History JSON object returned from HistoryClient during history creation
@@ -164,7 +162,7 @@ def _get_notes(history, workflow, library_list_mapping, library_datasets, upload
     :type library_list_mapping: dict of String to Galaxy DataSet JSON objects
     :param library_list_mapping: a map of workflow input names to galaxy library dataset JSON objects returned during HistoryClient upload
 
-    :type library_datasets: list of Galaxy DataSet JSON objects 
+    :type library_datasets: list of Galaxy DataSet JSON objects
     :param library_datasets: a list of the library datasets that were imported into the upload history
 
     :type upload_dataset_map: dict of String:Galaxy DataSet JSON objects
@@ -193,12 +191,12 @@ def _get_notes(history, workflow, library_list_mapping, library_datasets, upload
         dataset_file = ""
         workflow_label = workflow['inputs'][wf_input]['label']
         if workflow_label in library_list_mapping:
-            if not workflow_label in CONFIG_GLOBALS:
+            if workflow_label not in CONFIG_GLOBALS:
                 dataset_name = library_datasets[workflow_label]['name']
                 dataset_id = library_datasets[workflow_label]['id']
                 dataset_lib = library_datasets[workflow_label]['library_name']
                 notes.append(
-                    workflow_label + "("+wf_input + ") => " + dataset_lib + os.path.sep + dataset_name + " (" + dataset_id + ")")
+                    workflow_label + "(" + wf_input + ") => " + dataset_lib + os.path.sep + dataset_name + " (" + dataset_id + ")")
         elif workflow_label in upload_dataset_map:
             # This would need to be augmented if there are other types of
             # uploads needed
@@ -207,7 +205,7 @@ def _get_notes(history, workflow, library_list_mapping, library_datasets, upload
             dataset_name = dataset['name']
             dataset_id = dataset['id']
             notes.append(
-                workflow_label + "("+wf_input + ") => " + dataset_name + " (" + dataset_id + ") " + dataset_file)
+                workflow_label + "(" + wf_input + ") => " + dataset_name + " (" + dataset_id + ") " + dataset_file)
     return notes
 
 def _get_all_upload_files(root_path, upload_list_mapping, config_parser, upload_protocol, galaxy_instance):
@@ -217,8 +215,8 @@ def _get_all_upload_files(root_path, upload_list_mapping, config_parser, upload_
     :type: root_path: str
     :param root_path: The root input directory as specified as a main argument
 
-    :type: upload_list_mapping: dict 
-    :param: upload_list_mapping: a mapping of workflow input names to the local file patterns that should be found and uploaded to Galaxy 
+    :type: upload_list_mapping: dict
+    :param: upload_list_mapping: a mapping of workflow input names to the local file patterns that should be found and uploaded to Galaxy
 
     :type: config_parser: SafeConfigParser
     :param config_parser: The configuration parser for loading configuration from the ini file
@@ -305,7 +303,7 @@ def _get_r2_file(r1_file, config_parser, upload_protocol, file_list):
         if r1_file not in file_list:
             raise RuntimeError("%s R1 file Not Found" % r1_file)
         if r2_file not in file_list:
-            raise RuntimeError("%s R2 file Not Found" % r1_file)       
+            raise RuntimeError("%s R2 file Not Found" % r1_file)
 
     return r2_file
 
@@ -324,7 +322,7 @@ def _get_files(root_path, file_match_re, upload_protocol, galaxy_instance):
     :param upload_protocol: whether to upload files via HTTP or FTP
 
     :type: galaxy_instance: bioblend.galaxy.GalaxyInstance
-    :param galaxy_instance: A base representation of an instance of Galaxy, identified by a URL and a user API key  
+    :param galaxy_instance: A base representation of an instance of Galaxy, identified by a URL and a user API key
 
     :return list of file names that match the regular expression under the root directory
 
@@ -347,7 +345,7 @@ def _get_files(root_path, file_match_re, upload_protocol, galaxy_instance):
 def _post_wf_run(history, all_histories):
     '''
     This is a callback method which gets invoked when _launch_workflow completes successfully.
-    It will log information into the global workflow_run log file and also add the resulting 
+    It will log information into the global workflow_run log file and also add the resulting
     history JSON object to the all_histories list for serialization to All_Histories.json file.
 
     '''
@@ -360,12 +358,12 @@ def _post_wf_run(history, all_histories):
 
     all_histories.append(history)
 
-def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_input_files_map, genome, library_list_mapping, library_datasets, sample_name, result_dir, upload_protocol ):
+def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_input_files_map, genome, library_list_mapping, library_datasets, sample_name, result_dir, upload_protocol):
     '''
     Launches a workflow in Galaxy.  Assumed that this function is thread safe - can be run leveraging multiprocessing python logic asyncronously.
 
     :type: galaxy_host: string
-    :param galaxy_host: The connection URL/address to the galaxy server as configured in the configuration.ini file 
+    :param galaxy_host: The connection URL/address to the galaxy server as configured in the configuration.ini file
 
     :type: api_key: string
     :param api_key: user Galaxy api string for user authentication in Galaxy communication
@@ -373,7 +371,7 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
     :type workflow: bioblend Galaxy Workflow JSON object
     :param workflow: Galaxy worfklow JSON object (genearted and returned during WorkflowClient.show_workflow)
 
-    :type: upload_history: bioblend Galaxy History JSON object 
+    :type: upload_history: bioblend Galaxy History JSON object
     :param upload_history: Galaxy history JSON object (generated and returned during HistoryClient.create_history)
 
     :type upload_input_files_map: dict of String:FilePaths
@@ -385,11 +383,11 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
     :type library_list_mapping: dict of String to Galaxy DataSet JSON objects
     :param library_list_mapping: a map of workflow input names to galaxy library dataset JSON objects returned during HistoryClient upload
 
-    :type library_datasets: list of Galaxy DataSet JSON objects 
+    :type library_datasets: list of Galaxy DataSet JSON objects
     :param library_datasets: a list of the library datasets that were imported into the upload history
 
     :type: sample_name: string
-    :param sample_name: The sample name 
+    :param sample_name: The sample name
 
     :type: result_dir: string
     :param result_dir: The directory to place results into (log files and serialized JSON history objects)
@@ -409,7 +407,7 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
             key: sample_dir
             value: the directory name/path where the sample input files were locally found and uploaded from
 
-            key: upload_history_name 
+            key: upload_history_name
             value: the name of the history containing the uploaded files for this workflow run
 
             key: result_dir
@@ -430,15 +428,14 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
         logging.root.removeHandler(handler)
 
     tab_formatter = '\t\t\t\t'
-    runlog_filename = os.path.join(sample_result_dir, sample_name+"_Workflow_Runner.log")
+    runlog_filename = os.path.join(sample_result_dir, sample_name + "_Workflow_Runner.log")
     logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s',
                     datefmt='%m-%d %H:%M',
                     filename=runlog_filename,
                     filemode='wb')
 
-    local_logger = logging.getLogger("workflow_runner_"+sample_name)
-
+    local_logger = logging.getLogger("workflow_runner_" + sample_name)
 
     try:
         galaxy_instance = GalaxyInstance(galaxy_host, key=api_key)
@@ -526,7 +523,7 @@ def _get_argparser():
     :return: Configured parsrer for processing arguments supplied to main method (for example from command line) :argparse.ArgumentParser: argparse ArgumentParser object
     '''
     arg_parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                         #usage='%(prog)s [OPTIONS]',
+                                         # usage='%(prog)s [OPTIONS]',
                                          description=textwrap.dedent('''\
                                                     Automatically launch Galaxy workflows, including uploading input files
                                                     and importing of additional input files from Galaxy shared data libraries.
@@ -551,9 +548,9 @@ def _get_argparser():
                                             workflow_runner.py /Users/annblack/GalaxyAutomation/fastqs/batch23 -o /Users/annblack/Results/batch23/results -i configuration.eablck.ini
 
                                             '''))
-    arg_parser.add_argument('-i', '--input_dir', help="directory which contains the workflow input files (subfolders will be traversed) that need to be uploaded.  IE, the files used to match to upload_input_ids (configuration.ini)")
+    arg_parser.add_argument('input_dir', help="directory which contains the workflow input files (subfolders will be traversed) that need to be uploaded if uploading over http.  Batch name to use if uploading from ftp.")
     arg_parser.add_argument('-o', '--output_dir', help="directory to save logs into as well as history log file (All_Histories.json, used by the history_utils.py tool) Recommended to also be a directory you would like to download workflow results into. Directory will be created if it does not exist. Default will be $INPUT_DIR/results", default='$INPUT_DIR/results')
-    arg_parser.add_argument('-c', '--config', help="configuration ini file to load", default='configuration.ini')
+    arg_parser.add_argument('-i', '--ini', help="configuration ini file to load", default='configuration.ini')
 
     return arg_parser
 
@@ -570,18 +567,18 @@ def _parse_ini(args):
 
     config_parser = SafeConfigParser()
 
-    if args.config == 'configuration.ini':
+    if args.ini == 'configuration.ini':
         logger.info("A configuration file was not specified when running the command.  Will look for a default file \'configuration.ini\' to load configuration from.")
-        if not os.path.isfile(args.config):
-            raise RuntimeError("The configuration file, %s, does not exist. Create a configuration ini file and try again. Exiting." % (args.config))
-            
+        if not os.path.isfile(args.ini):
+            raise RuntimeError("The configuration file, %s, does not exist. Create a configuration ini file and try again. Exiting." % (args.ini))
+
         config_parser.read('configuration.ini')
-    elif args.config.endswith('.ini'):
-        if not os.path.isfile(args.config):
-            raise RuntimeError("The configuration file, %s, does not exist. Create a configuration ini file and try again. Exiting." % (args.config))
-        config_parser.read(args.config)
+    elif args.ini.endswith('.ini'):
+        if not os.path.isfile(args.ini):
+            raise RuntimeError("The configuration file, %s, does not exist. Create a configuration ini file and try again. Exiting." % (args.ini))
+        config_parser.read(args.ini)
     else:
-        raise RuntimeError("The configuration ini file must end with .ini, the file specified was %s" % (args.config))
+        raise RuntimeError("The configuration ini file must end with .ini, the file specified was %s" % (args.ini))
 
     return config_parser
 
@@ -591,11 +588,11 @@ def _parse_ini(args):
 ##########################################################################
 def main(argv=None):
 
-    ## Build log file.
-    ## We will have a main logger to system out
-    ## A global log file
-    ## And a log per each sample in the sample directory
-    ## configure console logging
+    # Build log file.
+    # We will have a main logger to system out
+    # A global log file
+    # And a log per each sample in the sample directory
+    # configure console logging
 
     logger = logging.getLogger(LOGGER_NAME)
     logger.setLevel(logging.DEBUG)
@@ -679,8 +676,8 @@ def main(argv=None):
             arg_parser.print_usage()
             logger.error("Input directory argument required if upload protocol is http.")
             return 8
-        if upload_protocol == "ftp" and args.input_dir is not None:
-            logger.error("Input directory must not be specified if upload protocol is ftp.")
+        if upload_protocol == "ftp" and args.input_dir is None:
+            logger.error("Batch name must not be specified if upload protocol is ftp.")
             return 9
 
         pool = Pool(processes=int(num_processes))
@@ -691,7 +688,7 @@ def main(argv=None):
 
         # Start to officially log into the results directory
         logger.info("")
-        input_dir = args.input_dir if (upload_protocol == "http") else "[FTP directory]"
+        input_dir = args.input_dir if (upload_protocol == "http") else "[FTP directory] " + args.input_dir
         logger.info("Locating input files.  Searching the following directory (and child directories): \n%s%s" % (tab_formatter, input_dir))
         # Put library and upload config into dicts
         library_list_mapping = {}  # {filename: ID}
@@ -707,11 +704,12 @@ def main(argv=None):
 
         upload_wf_input_files_list = _get_all_upload_files(args.input_dir, upload_list_mapping, config_parser, upload_protocol, galaxy_instance)
 
-        #files = _get_files(args.input_dir, read1_re)
+        # files = _get_files(args.input_dir, read1_re)
         if len(upload_wf_input_files_list) == 0:
             if upload_protocol == "http":
                 logger.warning("Not able to find any input files. Looked in %s" % args.input_dir)
-            else:  #ftp
+            else:
+                # ftp
                 logger.warning("Not able to find any input files uploaded via FTP.")
         else:
             # Input files have been found, lets try to prep for running workflows.
@@ -759,7 +757,13 @@ def main(argv=None):
             if dir_arg.endswith(os.path.sep):
                 normalized_input_dir = normalized_input_dir[:-1]
 
-            batch_name = "Input_files:%s" % os.path.basename(normalized_input_dir)
+            if args.input_dir is None:
+                batch_name = "Input_files:%s" % os.path.basename(normalized_input_dir)
+            else if upload_protocol == "http":
+                batch_name = os.path.basename(normalized_input_dir)
+            else:
+                batch_name = args.input_dir
+
             logger.info("All input files will be uploaded/imported into the Galaxy history: %s" % batch_name)
             upload_history = history_client.create_history(batch_name)
             upload_history['upload_history'] = True
@@ -794,7 +798,7 @@ def main(argv=None):
                         sample_result.get()
                     except Exception as inst:
                         # Write it out to failed log - need for retry.
-                        failed_samples.write(sample+"\n")
+                        failed_samples.write(sample + "\n")
                         logger.error("Unexpected Error occurred: %s , %s " % (type(inst), inst))
                         logger.exception(inst)
 
@@ -845,4 +849,3 @@ LOGGER_NAME = 'workflow_runner'
 
 if __name__ == "__main__":
     sys.exit(main())
-
