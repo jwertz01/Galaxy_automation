@@ -3,26 +3,7 @@ __author__ = 'tbair,eablck,jwertz'
 
 # Needs python 2.7 or higher for functionality
 
-from bioblend.galaxy import GalaxyInstance
-from bioblend.galaxy.histories import HistoryClient
-from bioblend.galaxy.tools import ToolClient
-from bioblend.galaxy.workflows import WorkflowClient
-from bioblend.galaxy.client import ConnectionError
-from bioblend.galaxy.ftpfiles import FTPFilesClient
-from requests.packages import urllib3
-from ConfigParser import SafeConfigParser
-from multiprocessing import Pool
-from functools import partial
-import sys
-import os
-import fnmatch
-import os.path
-import re
-import json
-import argparse
-import textwrap
-import logging
-import collections
+from automation_functions import *
 
 class MaxLevelFilter(logging.Filter):
     '''
@@ -548,10 +529,10 @@ def _get_argparser():
                                             workflow_runner.py /Users/annblack/GalaxyAutomation/fastqs/batch23 -o /Users/annblack/Results/batch23/results -i configuration.eablck.ini
 
                                             '''))
-    arg_parser.add_argument('input_dir', help="directory which contains the workflow input files (subfolders will be traversed) that need to be uploaded if uploading over http.  Batch name to use if uploading from ftp.")
+    arg_parser.add_argument('input_dir', help="directory which contains the workflow input files (subfolders will be traversed) that need to be uploaded if uploading over http.  Batch name to use if uploading from ftp. if --retry_failed, this the results directory containing All_Histories.json from a previous automation run.")
     arg_parser.add_argument('-o', '--output_dir', help="directory to save logs into as well as history log file (All_Histories.json, used by the history_utils.py tool) Recommended to also be a directory you would like to download workflow results into. Directory will be created if it does not exist. Default will be $INPUT_DIR/results", default='$INPUT_DIR/results')
     arg_parser.add_argument('-i', '--ini', help="configuration ini file to load", default='configuration.ini')
-
+    arg_parser.add_argument('-r', '--retry_failed', action="store_true", help="whether to re-run a failed workflow instead of running new files", default=False)
     return arg_parser
 
 def _parse_ini(args):
@@ -686,6 +667,42 @@ def main(argv=None):
         history_client = HistoryClient(galaxy_instance)
         workflow_client = WorkflowClient(galaxy_instance)
 
+        # retry_failed processing
+        if args.retry_failed:
+            histories = read_all_histories(args.input_dir, logger)
+            (
+                all_successful, all_running, all_failed, all_except, all_waiting,
+                upload_history
+            ) = get_history_status(histories, history_client, logger)
+
+            failed_dirs_to_run = []
+            for failed_dir in all_failed:
+                orig_input_dir_str = [z for z in failed_dir.history['notes'] if ('Original Input Directory:' in z)]
+                if len(orig_input_dir_str) != 1:
+                    logger.error("Could not identify original input directory in All_Histories.json.")
+                    return 10
+                orig_input_dir = orig_input_dir_str[0].replace('Original Input Directory:', '').strip()
+                if not os.path.exists(orig_input_dir):
+                    logger.error("Original input directory \"%s\" does not exist" % orig_input_dir)
+                    return 11
+                failed_dirs_to_run.append(orig_input_dir)
+            failed_dirs_to_run = set(list(failed_dirs_to_run))
+            if len(failed_dirs_to_run) == 0:
+                logger.error("Could not find any failed directories to retry.")
+                return 12
+            logger.info("Found %d failed histories to rerun: %s" % (len(failed_dirs_to_run), ', '.join(failed_dirs_to_run)))
+
+            in_retry_dir = os.path.join(args.input_dir, '%s_failed_retry_dirs' % os.path.basename(os.path.dirname(list(failed_dirs_to_run)[0])))
+            if not os.path.exists(in_retry_dir):
+                os.makedirs(in_retry_dir)
+
+            for d in failed_dirs_to_run:
+                symlink_path = os.path.join(in_retry_dir, os.path.basename(d))
+                if os.path.exists(symlink_path):
+                    os.remove(symlink_path)
+                os.symlink(d, symlink_path)
+            args.input_dir = in_retry_dir
+
         # Start to officially log into the results directory
         logger.info("")
         input_dir = args.input_dir if (upload_protocol == "http") else "[FTP directory] " + args.input_dir
@@ -808,7 +825,7 @@ def main(argv=None):
             logger.info("Number of samples found: %s" % str(len(upload_wf_input_files_list)))
             logger.info("Workflow, %s, has been launched for all samples." % workflow['name'])
             logger.info("You can view history status by invoking the following command:")
-            logger.info("%s>> python history_status.py <my_result_dir> --ini <myConfiguration.ini>" % tab_formatter)
+            logger.info("%s>> python history_utils.py <my_result_dir> check_status --ini <myConfiguration.ini>" % tab_formatter)
             logger.info("")
             logger.info("A log of all samples processed and their inputs can be found here: %s" % runlog_filename)
             logger.info("")
