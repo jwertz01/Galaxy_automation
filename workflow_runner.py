@@ -339,7 +339,7 @@ def _post_wf_run(history, all_histories):
 
     all_histories.append(history)
 
-def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_input_files_map, genome, library_list_mapping, library_datasets, sample_name, result_dir, upload_protocol):
+def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_input_files_map, genome, library_list_mapping, library_datasets, sample_name, result_dir, upload_protocol, retry_failed, failed_sample_to_run):
     '''
     Launches a workflow in Galaxy.  Assumed that this function is thread safe - can be run leveraging multiprocessing python logic asyncronously.
 
@@ -398,7 +398,6 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
             value: the sample level directory which contains the log for this specific sample run
 
     '''
-
     # Create a log file specific for this sample
     sample_result_dir = os.path.join(result_dir, sample_name)
     if not os.path.exists(sample_result_dir):
@@ -438,24 +437,32 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
         history['upload_history_name'] = upload_history['name']
         history['result_dir'] = result_dir
         history['sample_result_dir'] = sample_result_dir
+        history['library_datasets'] = library_datasets
 
         # upload all the files
-        local_logger.info("Uploading input files for workflow: %s" % workflow['name'])
-        upload_dataset_map = {}
-        for wf_inputname in upload_input_files_map.keys():
-            upload_file = upload_input_files_map[wf_inputname]
-            if upload_protocol == "http":
-                input_upload_out = tool_client.upload_file(
-                    upload_file, upload_history['id'], file_type='fastqsanger', dbkey=genome)
-            else:
-                input_upload_out = tool_client.upload_from_ftp(
-                    upload_file, upload_history['id'], file_type='fastqsanger', dbkey=genome)
-            local_logger.info("\tUploaded: %s => %s" % (wf_inputname, upload_file))
-            input_dataset = input_upload_out['outputs'][0]
-            upload_dataset_map[wf_inputname] = input_dataset
+        if not retry_failed:
+            local_logger.info("Uploading input files for workflow: %s" % workflow['name'])
+            upload_dataset_map = {}
+            for wf_inputname in upload_input_files_map.keys():
+                upload_file = upload_input_files_map[wf_inputname]
+                if upload_protocol == "http":
+                    input_upload_out = tool_client.upload_file(
+                        upload_file, upload_history['id'], file_type='fastqsanger', dbkey=genome)
+                else:
+                    input_upload_out = tool_client.upload_from_ftp(
+                        upload_file, upload_history['id'], file_type='fastqsanger', dbkey=genome)
+                local_logger.info("\tUploaded: %s => %s" % (wf_inputname, upload_file))
+                input_dataset = input_upload_out['outputs'][0]
+                upload_dataset_map[wf_inputname] = input_dataset
 
-        data_map = _setup_base_datamap(
-            workflow, library_list_mapping, library_datasets, upload_dataset_map)
+            data_map = _setup_base_datamap(
+                workflow, library_list_mapping, library_datasets, upload_dataset_map)
+        else:
+            data_map = failed_sample_to_run.history['input_map']
+            upload_dataset_map = failed_sample_to_run.history['upload_dataset_map']
+
+        history['input_map'] = data_map
+        history['upload_dataset_map'] = upload_dataset_map
 
         # Have files in place need to set up workflow
         # Based on example at
@@ -645,21 +652,22 @@ def main(argv=None):
         upload_protocol = config_parser.get('Globals', 'upload_protocol').lower()
 
         # Check upload protocol
-        accepted_protocols = ["http", "ftp"]
-        default_protocol = "http"
-        if not upload_protocol:
-            upload_protocol = default_protocol
-            logger.info("Upload protocol not specified. Using default: %s" % default_protocol)
-        if upload_protocol not in accepted_protocols:
-            logger.error("Unrecognized upload protocol: %s. Please specify one of the following values: %s" % (upload_protocol, ', '.join(accepted_protocols)))
-            return 7
-        if upload_protocol == "http" and args.input_dir is None:
-            arg_parser.print_usage()
-            logger.error("Input directory argument required if upload protocol is http.")
-            return 8
-        if upload_protocol == "ftp" and args.input_dir is None:
-            logger.error("Batch name must be specified if upload protocol is ftp. (Batch name is used to name the upload Galaxy history and tag all result histories for easy lookup.)")
-            return 9
+        if not args.retry_failed:
+            accepted_protocols = ["http", "ftp"]
+            default_protocol = "http"
+            if not upload_protocol:
+                upload_protocol = default_protocol
+                logger.info("Upload protocol not specified. Using default: %s" % default_protocol)
+            if upload_protocol not in accepted_protocols:
+                logger.error("Unrecognized upload protocol: %s. Please specify one of the following values: %s" % (upload_protocol, ', '.join(accepted_protocols)))
+                return 7
+            if upload_protocol == "http" and args.input_dir is None:
+                arg_parser.print_usage()
+                logger.error("Input directory argument required if upload protocol is http.")
+                return 8
+            if upload_protocol == "ftp" and args.input_dir is None:
+                logger.error("Batch name must be specified if upload protocol is ftp. (Batch name is used to name the upload Galaxy history and tag all result histories for easy lookup.)")
+                return 9
 
         pool = Pool(processes=int(num_processes))
 
@@ -667,41 +675,18 @@ def main(argv=None):
         history_client = HistoryClient(galaxy_instance)
         workflow_client = WorkflowClient(galaxy_instance)
 
-        # retry_failed processing
+        failed_samples_to_run = []  # list of histories
         if args.retry_failed:
             histories = read_all_histories(args.input_dir, logger)
             (
                 all_successful, all_running, all_failed, all_except, all_waiting,
                 upload_history
             ) = get_history_status(histories, history_client, logger)
-
-            failed_dirs_to_run = []
-            for failed_dir in all_failed:
-                orig_input_dir_str = [z for z in failed_dir.history['notes'] if ('Original Input Directory:' in z)]
-                if len(orig_input_dir_str) != 1:
-                    logger.error("Could not identify original input directory in All_Histories.json.")
-                    return 10
-                orig_input_dir = orig_input_dir_str[0].replace('Original Input Directory:', '').strip()
-                if not os.path.exists(orig_input_dir):
-                    logger.error("Original input directory \"%s\" does not exist" % orig_input_dir)
-                    return 11
-                failed_dirs_to_run.append(orig_input_dir)
-            failed_dirs_to_run = set(list(failed_dirs_to_run))
-            if len(failed_dirs_to_run) == 0:
+            if not all_failed:
                 logger.error("Could not find any failed directories to retry.")
-                return 12
-            logger.info("Found %d failed histories to rerun: %s" % (len(failed_dirs_to_run), ', '.join(failed_dirs_to_run)))
-
-            in_retry_dir = os.path.join(args.input_dir, '%s_failed_retry_dirs' % os.path.basename(os.path.dirname(list(failed_dirs_to_run)[0])))
-            if not os.path.exists(in_retry_dir):
-                os.makedirs(in_retry_dir)
-
-            for d in failed_dirs_to_run:
-                symlink_path = os.path.join(in_retry_dir, os.path.basename(d))
-                if os.path.exists(symlink_path):
-                    os.remove(symlink_path)
-                os.symlink(d, symlink_path)
-            args.input_dir = in_retry_dir
+                return 10
+            failed_samples_to_run = all_failed
+            logger.info("Found %d failed samples to rerun: %s" % (len(failed_samples_to_run), ', '.join([z.history['name'] for z in failed_samples_to_run])))
 
         # Start to officially log into the results directory
         logger.info("")
@@ -719,10 +704,11 @@ def main(argv=None):
             key, value = data.split(':')
             upload_list_mapping[key] = value
 
-        upload_wf_input_files_list = _get_all_upload_files(args.input_dir, upload_list_mapping, config_parser, upload_protocol, galaxy_instance)
+        if not args.retry_failed:
+            upload_wf_input_files_list = _get_all_upload_files(args.input_dir, upload_list_mapping, config_parser, upload_protocol, galaxy_instance)
 
         # files = _get_files(args.input_dir, read1_re)
-        if len(upload_wf_input_files_list) == 0:
+        if not args.retry_failed and len(upload_wf_input_files_list) == 0:
             if upload_protocol == "http":
                 logger.warning("Not able to find any input files. Looked in %s" % args.input_dir)
             else:
@@ -761,47 +747,62 @@ def main(argv=None):
             # Files have been found.  Lets create a common history and use it to
             # upload all inputs and all data library input files.  A new history
             # will be created for each sample workflow run to store only results.
-            if upload_protocol == "http":
-                dir_arg = args.input_dir
-            else:
-                sample_names = []
-                for upload_wf_input_files_map in upload_wf_input_files_list:
-                    sample_name = _parse_sample_name(upload_wf_input_files_map.values()[0], file_name_re)
-                    sample_names.append(sample_name)
-                dir_arg = "|".join(sample_names)
+            if not args.retry_failed:
+                if upload_protocol == "http":
+                    dir_arg = args.input_dir
+                else:
+                    sample_names = []
+                    for upload_wf_input_files_map in upload_wf_input_files_list:
+                        sample_name = _parse_sample_name(upload_wf_input_files_map.values()[0], file_name_re)
+                        sample_names.append(sample_name)
+                    dir_arg = "|".join(sample_names)
 
-            normalized_input_dir = dir_arg
-            if dir_arg.endswith(os.path.sep):
-                normalized_input_dir = normalized_input_dir[:-1]
+                normalized_input_dir = dir_arg
+                if dir_arg.endswith(os.path.sep):
+                    normalized_input_dir = normalized_input_dir[:-1]
 
-            if args.input_dir is None:
-                batch_name = "Input_files:%s" % os.path.basename(normalized_input_dir)
-            elif upload_protocol == "http":
-                batch_name = os.path.basename(normalized_input_dir)
-            else:
-                batch_name = args.input_dir
+                if args.input_dir is None:
+                    batch_name = "Input_files:%s" % os.path.basename(normalized_input_dir)
+                elif upload_protocol == "http":
+                    batch_name = os.path.basename(normalized_input_dir)
+                else:
+                    batch_name = args.input_dir
 
-            logger.info("All input files will be uploaded/imported into the Galaxy history: %s" % batch_name)
-            upload_history = history_client.create_history(batch_name)
-            upload_history['upload_history'] = True
-            all_histories.append(upload_history)
-            library_datasets = _import_library_datasets(history_client, upload_history, library_dataset_list, default_lib)
+                logger.info("All input files will be uploaded/imported into the Galaxy history: %s" % batch_name)
+                upload_history = history_client.create_history(batch_name)
+                upload_history['upload_history'] = True
+                all_histories.append(upload_history)
+                library_datasets = _import_library_datasets(history_client, upload_history, library_dataset_list, default_lib)
 
             wf_results = {}
-
             # Upload the files needed for the workflow
-            for upload_wf_input_files_map in upload_wf_input_files_list:
-                # upload the local files and launch a workflow.
-                sample_name = _parse_sample_name(upload_wf_input_files_map.values()[0], file_name_re)
-                logger.info("Preparing Galaxy to run a workflow for: %s" % sample_name)
-                logger.info("\tThe following input files will be uploaded: ")
-                for wf_input_name in upload_wf_input_files_map.keys():
-                    logger.info("\t%s => %s" % (wf_input_name, upload_wf_input_files_map[wf_input_name]))
+            if not args.retry_failed:
+                for upload_wf_input_files_map in upload_wf_input_files_list:
+                    # upload the local files and launch a workflow.
+                    sample_name = _parse_sample_name(upload_wf_input_files_map.values()[0], file_name_re)
+                    logger.info("Preparing Galaxy to run a workflow for: %s" % sample_name)
+                    logger.info("\tThe following input files will be uploaded: ")
+                    for wf_input_name in upload_wf_input_files_map.keys():
+                        logger.info("\t%s => %s" % (wf_input_name, upload_wf_input_files_map[wf_input_name]))
 
-                new_post_wf_run = partial(_post_wf_run, all_histories=all_histories)
-                result = pool.apply_async(_launch_workflow, args=[galaxy_host, api_key, workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir, upload_protocol], callback=new_post_wf_run)
-                wf_results[sample_name] = result
-
+                    new_post_wf_run = partial(_post_wf_run, all_histories=all_histories)
+                    result = pool.apply_async(_launch_workflow, args=[galaxy_host, api_key, workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir, upload_protocol, args.retry_failed, None], callback=new_post_wf_run)
+                    wf_results[sample_name] = result
+            else:
+                for s in failed_samples_to_run:
+                    upload_history = s.history
+                    sample_name = "%s_retry" % s.history['name']
+                    input_map = s.history['input_map']
+                    library_datasets = s.history['library_datasets']
+                    orig_input_dir = [z for z in s.history['notes'] if ('Original Input Directory:' in z)]
+                    orig_input_dir = orig_input_dir[0].replace('Original Input Directory:', '').strip()
+                    upload_wf_input_files_list = _get_all_upload_files(orig_input_dir, upload_list_mapping, config_parser, upload_protocol, galaxy_instance)
+                    upload_wf_input_files_map = [z for z in upload_wf_input_files_list if os.path.basename(z['R1 FastQ']).startswith(s.history['name'])]
+                    assert len(upload_wf_input_files_map) == 1
+                    upload_wf_input_files_map = upload_wf_input_files_map[0]
+                    new_post_wf_run = partial(_post_wf_run, all_histories=all_histories)
+                    result = pool.apply_async(_launch_workflow, args=[galaxy_host, api_key, workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir, upload_protocol, args.retry_failed, s], callback=new_post_wf_run)
+                    wf_results[sample_name] = result
             # should be all done with processing.... this will block until all work is done
             pool.close()
             pool.join()
