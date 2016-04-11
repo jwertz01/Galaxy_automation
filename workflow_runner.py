@@ -797,7 +797,7 @@ def main(argv=None):
                     orig_input_dir = [z for z in s.history['notes'] if ('Original Input Directory:' in z)]
                     orig_input_dir = orig_input_dir[0].replace('Original Input Directory:', '').strip()
                     upload_wf_input_files_list = _get_all_upload_files(orig_input_dir, upload_list_mapping, config_parser, upload_protocol, galaxy_instance)
-                    upload_wf_input_files_map = [z for z in upload_wf_input_files_list if os.path.basename(z['R1 FastQ']).startswith(s.history['name'])]
+                    upload_wf_input_files_map = [z for z in upload_wf_input_files_list if os.path.basename(z[upload_dataset_list[0].split(':')[0]]).startswith(s.history['name'])]
                     assert len(upload_wf_input_files_map) == 1
                     upload_wf_input_files_map = upload_wf_input_files_map[0]
                     new_post_wf_run = partial(_post_wf_run, all_histories=all_histories)
