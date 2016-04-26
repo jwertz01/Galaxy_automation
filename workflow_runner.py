@@ -182,7 +182,10 @@ def _get_notes(history, workflow, library_list_mapping, library_datasets, upload
             # This would need to be augmented if there are other types of
             # uploads needed
             dataset = upload_dataset_map[workflow_label]
-            dataset_file = upload_input_files_map[workflow_label]
+            if upload_input_files_map:
+                dataset_file = upload_input_files_map[workflow_label]
+            else:
+                dataset_file = ''
             dataset_name = dataset['name']
             dataset_id = dataset['id']
             notes.append(
@@ -423,7 +426,10 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
         tool_client = ToolClient(galaxy_instance)
         workflow_client = WorkflowClient(galaxy_instance)
 
-        sample_dir = os.path.dirname(upload_input_files_map.values()[0])
+        if upload_input_files_map is not None:
+            sample_dir = os.path.dirname(upload_input_files_map.values()[0])
+        else:
+            sample_dir = ''
 
         local_logger.info("Launching workflow for sample: %s" % sample_name)
         history = history_client.create_history(sample_name)
@@ -797,9 +803,12 @@ def main(argv=None):
                     orig_input_dir = [z for z in s.history['notes'] if ('Original Input Directory:' in z)]
                     orig_input_dir = orig_input_dir[0].replace('Original Input Directory:', '').strip()
                     upload_wf_input_files_list = _get_all_upload_files(orig_input_dir, upload_list_mapping, config_parser, upload_protocol, galaxy_instance)
-                    upload_wf_input_files_map = [z for z in upload_wf_input_files_list if os.path.basename(z[upload_dataset_list[0].split(':')[0]]).startswith(s.history['name'])]
-                    assert len(upload_wf_input_files_map) == 1
-                    upload_wf_input_files_map = upload_wf_input_files_map[0]
+                    if upload_wf_input_files_list:
+                        upload_wf_input_files_map = [z for z in upload_wf_input_files_list if os.path.basename(z[upload_dataset_list[0].split(':')[0]]).startswith('%s_' % s.history['name'])]
+                        assert len(upload_wf_input_files_map) == 1
+                        upload_wf_input_files_map = upload_wf_input_files_map[0]
+                    else:
+                        upload_wf_input_files_map = None
                     new_post_wf_run = partial(_post_wf_run, all_histories=all_histories)
                     result = pool.apply_async(_launch_workflow, args=[galaxy_host, api_key, workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir, upload_protocol, args.retry_failed, s], callback=new_post_wf_run)
                     wf_results[sample_name] = result
