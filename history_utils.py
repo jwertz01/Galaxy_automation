@@ -209,7 +209,7 @@ def _report_status(num_histories, upload_history, all_except, all_failed, all_wa
         logger.error("\tFailures occurred when attempting the analyze the following samples/histories.")
         logger.error("\tIn your browser, please inspect the following histories and take necessary actions to re-run the NGS analysis:")
         for h_info in all_failed:
-            logger.error("\t\tHISTORY_NAME => %s , REPORTED STATUS => %s", h_info.history['name'], h_info.status['state'])
+            logger.error("\t\tHISTORY_NAME => %s , REPORTED STATUS => %s , RETRY_HISTORY_NAME => %s", h_info.history['name'], h_info.status['state'], h_info.history['retry_history_name'] if ('retry_history_name' in h_info.history) else "None")
 
     if len(all_waiting) > 0:
         logger.info("")
