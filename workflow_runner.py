@@ -426,7 +426,7 @@ def _launch_workflow(galaxy_host, api_key, workflow, upload_history, upload_inpu
         tool_client = ToolClient(galaxy_instance)
         workflow_client = WorkflowClient(galaxy_instance)
 
-        if upload_input_files_map is not None:
+        if upload_input_files_map:
             sample_dir = os.path.dirname(upload_input_files_map.values()[0])
         else:
             sample_dir = ''
@@ -692,6 +692,7 @@ def main(argv=None):
                 logger.error("Could not find any failed directories to retry.")
                 return 10
             failed_samples_to_run = all_failed
+            nonfailed_samples = all_successful + all_running + all_except + all_waiting
             logger.info("Found %d failed samples to rerun: %s" % (len(failed_samples_to_run), ', '.join([z.history['name'] for z in failed_samples_to_run])))
 
         # Start to officially log into the results directory
@@ -780,6 +781,15 @@ def main(argv=None):
                 all_histories.append(upload_history)
                 library_datasets = _import_library_datasets(history_client, upload_history, library_dataset_list, default_lib)
 
+            else:
+                failed_samples_to_run_temp = list(failed_samples_to_run)
+                for s in failed_samples_to_run_temp:
+                    if "retry_history_name" in s.history:
+                        failed_samples_to_run.remove(s)
+                    else:
+                        s.history['retry_history_name'] = "%s_retry" % s.history['sample_name']
+                all_histories += [z.history for z in nonfailed_samples] + [w.history for w in failed_samples_to_run_temp]
+
             wf_results = {}
             # Upload the files needed for the workflow
             if not args.retry_failed:
@@ -791,7 +801,7 @@ def main(argv=None):
                     for wf_input_name in upload_wf_input_files_map.keys():
                         logger.info("\t%s => %s" % (wf_input_name, upload_wf_input_files_map[wf_input_name]))
 
-                    new_post_wf_run = partial(_post_wf_run, all_histories=all_histories)
+                    new_post_wf_run = partial(_post_wf_run, all_histories=all_histories)  # post_wf_run() appends to all_histories
                     result = pool.apply_async(_launch_workflow, args=[galaxy_host, api_key, workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir, upload_protocol, args.retry_failed, None], callback=new_post_wf_run)
                     wf_results[sample_name] = result
             else:
@@ -803,15 +813,17 @@ def main(argv=None):
                     orig_input_dir = [z for z in s.history['notes'] if ('Original Input Directory:' in z)]
                     orig_input_dir = orig_input_dir[0].replace('Original Input Directory:', '').strip()
                     upload_wf_input_files_list = _get_all_upload_files(orig_input_dir, upload_list_mapping, config_parser, upload_protocol, galaxy_instance)
+                    upload_wf_input_files_map = None
                     if upload_wf_input_files_list:
                         upload_wf_input_files_map = [z for z in upload_wf_input_files_list if os.path.basename(z[upload_dataset_list[0].split(':')[0]]).startswith('%s_' % s.history['name'])]
-                        assert len(upload_wf_input_files_map) == 1
-                        upload_wf_input_files_map = upload_wf_input_files_map[0]
-                    else:
-                        upload_wf_input_files_map = None
-                    new_post_wf_run = partial(_post_wf_run, all_histories=all_histories)
+                        if upload_wf_input_files_map:
+                            assert len(upload_wf_input_files_map) == 1
+                            upload_wf_input_files_map = upload_wf_input_files_map[0]
+
+                    new_post_wf_run = partial(_post_wf_run, all_histories=all_histories)  # post_wf_run() appends to all_histories
                     result = pool.apply_async(_launch_workflow, args=[galaxy_host, api_key, workflow, upload_history, upload_wf_input_files_map, genome, library_list_mapping, library_datasets, sample_name, output_dir, upload_protocol, args.retry_failed, s], callback=new_post_wf_run)
                     wf_results[sample_name] = result
+
             # should be all done with processing.... this will block until all work is done
             pool.close()
             pool.join()
